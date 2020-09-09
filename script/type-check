@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# script/type-check: Run static analysis on the project's files
+#                    (excluding tests). Optionally pass in a path
+#                    to an individual file to analyze *only* that file.
+
+blue="\033[0;34m"
+normal="\033[0;39m"
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo -e "${blue}===> Type-checking files...${normal}"
+
+if [ -n "$1" ]; then
+  mypy "$1"
+else
+  mypy redical
+fi
+
+echo -e "${blue}<=== Done.${normal}"

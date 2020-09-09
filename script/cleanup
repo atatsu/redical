@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# script/cleanup: Remove various auto-generated files and directories.
+
+blue="\033[0;34m"
+normal="\033[0;39m"
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo -e "${blue}===> Cleaning up files...${normal}"
+
+rm -rf .mypy_cache \
+  && rm -rf .pytest_cache \
+  && rm -rf virtualenv \
+  && rm -rf .eggs \
+  && rm -rf dist \
+  && rm -rf *.egg-info \
+  && find . -name "__pycache__" -type d -exec rm -rf {} +;
+
+echo -e "${blue}<=== Done.${normal}"

@@ -1,0 +1,28 @@
+version: "2.4"
+
+volumes:
+  redical-storage:
+
+services:
+  redical-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    entrypoint:
+      - sh
+      - -c
+      - "poetry install && script/test-continuous"
+    environment:
+      - PYTHONASYNCIODEBUG=1
+    restart: on-failure
+    tty: true
+    volumes:
+      - ./:/code:rw
+
+  redis:
+    image: redis:latest
+    ports:
+      - ${REDICAL_REDIS_PORT:-6379}:6379
+    volumes:
+      - redical-storage:/data

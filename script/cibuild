@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# script/cibuild: Run integrity checks on the code being merged.
+#                 This is primarily designed to run on the continuous
+#                 integration server.
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+script/lint
+echo
+script/type-check
+echo
+script/test

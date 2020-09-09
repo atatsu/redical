@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# script/test: Run the test suite for this application. Optionally
+#              pass in a path to an individual test file to run
+#              the tests in that file *only*.
+
+blue="\033[0;34m"
+normal="\033[0;39m"
+red="\033[0;31m"
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+export PYTHONASYNCIODEBUG=1
+export PYTHONWARNINGS=default
+
+echo -e "${blue}===> Running tests...${normal}"
+
+if [ $(ls tests | wc -l) -eq 0 ]; then
+  echo "${red}No tests found.${normal}"
+else
+  if [ -n "$1" ]; then
+    python -m pytest "$1" -vv -W error::UserWarning
+  else
+    python -m pytest -vv -W error::UserWarning
+  fi
+fi
+
+echo -e "${blue}<=== Done.${normal}"

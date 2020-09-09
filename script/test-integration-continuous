@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# script/test-continuous: Run the linter, static analysis, and unit tests
+#                         whenever a file change is detected.
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+export PYTHONASYNCIODEBUG=1
+export PYTHONWARNINGS=default
+
+ptw .  --onpass script/lint --onfail script/lint -- -m integration -vv -W error::UserWarning

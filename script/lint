@@ -1,0 +1,37 @@
+#!/bin/sh
+
+# script/lint: Run the linter on the project's files (including tests).
+#              Optionally pass in a path to an individual file to
+#              lint *only* that file.
+
+bold="\033[0;1m"
+blue="\033[0;34m"
+green="\033[0;32m"
+normal="\033[0;39m"
+red="\033[0;31m"
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo -e "${blue}===> Linting files...${normal}"
+
+echo -en ${bold}${red}
+if [ -n "$1" ]; then
+  flake8 "$1"
+  result=$?
+else
+  flake8 redical/ && flake8 tests/
+  result=$?
+fi
+echo -en ${normal}
+
+if [ "$result" -eq "0" ]; then
+  echo -e ${bold}${green}Success ${normal}
+fi
+
+echo -e "${blue}<=== Done.${normal}"
+
+if [ "${result}" -ne "0" ]; then
+  exit 1
+fi
