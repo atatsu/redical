@@ -1,0 +1,122 @@
+import asyncio
+from dataclasses import dataclass
+from typing import Any, Tuple
+from urllib.parse import quote
+
+import pytest  # type: ignore
+from yarl import URL
+
+from redical import create_connection, Connection
+
+
+# TODO: SSL
+# TODO: Test command execute while in disconnected state
+
+@dataclass
+class Server:
+	address: Tuple[str, int]
+	server: Any
+	event: asyncio.Event
+
+
+@dataclass
+class UnixServer:
+	path: str
+	server: Any
+
+
+@pytest.fixture
+async def unix_server(unix_socket):
+	server = None
+	_writer = None
+
+	async def handler(reader, writer):
+		nonlocal _writer
+		_writer = writer
+
+	server = await asyncio.start_unix_server(handler, path=unix_socket)
+	quoted = quote(unix_socket, safe='')
+	path = f'unix://{quoted}'
+	yield UnixServer(path=path, server=server)
+	_writer.close()
+	await _writer.wait_closed()
+
+
+@pytest.fixture
+async def disconnecting_server(unused_port):
+	event = asyncio.Event()
+	server = None
+
+	async def handler(reader, writer):
+		nonlocal server
+		nonlocal event
+		writer.write_eof()
+		writer.close()
+		await writer.wait_closed()
+		server.close()
+		await server.wait_closed()
+		event.set()
+
+	server = await asyncio.start_server(handler, '127.0.0.1', unused_port)
+	return Server(address=('127.0.0.1', unused_port), server=server, event=event)
+
+
+@pytest.mark.asyncio
+async def test_create_connection_uri(redis_uri):
+	conn = await create_connection(redis_uri)
+	assert isinstance(conn, Connection)
+	assert not conn.is_closed
+	conn.close()
+	try:
+		await asyncio.wait_for(conn.wait_closed(), timeout=1)
+	except asyncio.TimeoutError:
+		pytest.fail('connection failed to close gracefully')
+	assert conn.is_closed
+
+
+@pytest.mark.asyncio
+async def test_create_connection_address(redis_uri):
+	url = URL(redis_uri)
+	conn = await create_connection((url.host, url.port))
+	assert isinstance(conn, Connection)
+	assert not conn.is_closed
+	conn.close()
+	try:
+		await asyncio.wait_for(conn.wait_closed(), timeout=1)
+	except asyncio.TimeoutError:
+		pytest.fail('connection failed to close gracefully')
+	assert conn.is_closed
+
+
+@pytest.mark.asyncio
+async def test_create_connection_wait_no_close(redis_uri):
+	conn = await create_connection(redis_uri)
+	try:
+		await asyncio.wait_for(conn.wait_closed(), timeout=1)
+	except asyncio.TimeoutError:
+		pytest.fail('a proper exception was not raised')
+	except RuntimeError:
+		pass
+	finally:
+		conn.close()
+		await conn.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_create_connection_remote_closed(disconnecting_server):
+	async with disconnecting_server.server:
+		conn = await create_connection(disconnecting_server.address)
+		await disconnecting_server.event.wait()
+	assert conn.is_closed
+
+
+@pytest.mark.asyncio
+async def test_create_connection_unix_socket(unix_server):
+	async with unix_server.server:
+		conn = await create_connection(unix_server.path)
+		assert not conn.is_closed
+		conn.close()
+		try:
+			await asyncio.wait_for(conn.wait_closed(), timeout=1)
+		except asyncio.TimeoutError:
+			pytest.fail('connection failed to close gracefully')

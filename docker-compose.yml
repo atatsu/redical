@@ -4,17 +4,20 @@ volumes:
   redical-storage:
 
 services:
-  redical-tests:
+  tests:
     build:
       context: .
       dockerfile: Dockerfile
       target: dev
+    depends_on:
+      - redis
     entrypoint:
       - sh
       - -c
       - "poetry install && script/test-continuous"
     environment:
       - PYTHONASYNCIODEBUG=1
+      - REDICAL_REDIS_URI=redis://redis:6379
     restart: on-failure
     tty: true
     volumes:
