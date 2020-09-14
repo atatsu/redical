@@ -1,0 +1,2 @@
+class Redical:
+	pass

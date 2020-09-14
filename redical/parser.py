@@ -1,3 +1,5 @@
+from typing import Any
+
 try:
 	from hiredis import Reader as HiredisParser  # type: ignore
 except ImportError:
@@ -12,4 +14,11 @@ class PyParser:
 
 
 class Parser(HiredisParser, PyParser, AbstractParser):
-	pass
+	def gets(self) -> Any:
+		parsed: Any = super().gets()
+		if parsed is False:
+			return parsed
+		# convert 'OK' responses to bool
+		if parsed == b'OK':
+			return True
+		return parsed

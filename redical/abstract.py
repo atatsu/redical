@@ -1,5 +1,6 @@
 from abc import abstractmethod, ABC
-from typing import Any, List, Optional, Tuple
+from asyncio import Future
+from typing import Any, AnyStr, List, Optional, Tuple
 
 __all__: List[str] = ['AbstractConnection', 'AbstractParser', 'AbstractPool']
 
@@ -36,11 +37,11 @@ class AbstractConnection(ABC):
 	#     Connection's encoding, if one was specified.
 	#     """
 
-	# @abstractmethod
-	# def execute(self, command: bytes, *args: Any, **kwargs: Any) -> None:
-	#     """
-	#     Execute a redis command.
-	#     """
+	@abstractmethod
+	async def execute(self, command: AnyStr, *args: Any, **kwargs: Any) -> Future:
+		"""
+		Execute a redis command.
+		"""
 
 	@abstractmethod
 	def close(self) -> None:
@@ -87,7 +88,7 @@ class AbstractParser(ABC):
 	Parsers must conform to the `hiredis.Reader` interface.
 	"""
 	@abstractmethod
-	def feed(self, data: str) -> None:
+	def feed(self, data: bytes) -> None:
 		"""
 		"""
 

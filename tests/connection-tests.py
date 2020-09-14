@@ -7,6 +7,7 @@ import pytest  # type: ignore
 from yarl import URL
 
 from redical import create_connection, Connection
+from redical.connection import _build_command
 
 
 # TODO: SSL
@@ -59,6 +60,14 @@ async def disconnecting_server(unused_port):
 
 	server = await asyncio.start_server(handler, '127.0.0.1', unused_port)
 	return Server(address=('127.0.0.1', unused_port), server=server, event=event)
+
+
+@pytest.fixture
+async def conn(redis_uri):
+	conn = await create_connection(redis_uri)
+	yield conn
+	conn.close()
+	await conn.wait_closed()
 
 
 @pytest.mark.asyncio
@@ -120,3 +129,36 @@ async def test_create_connection_unix_socket(unix_server):
 			await asyncio.wait_for(conn.wait_closed(), timeout=1)
 		except asyncio.TimeoutError:
 			pytest.fail('connection failed to close gracefully')
+
+
+@pytest.mark.parametrize('command, args, expected', [
+	('set', ('mykey', 'foo'), b'*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$3\r\nfoo\r\n')
+])
+def test_build_command(command, args, expected):
+	cmd = _build_command(command, *args)
+	assert expected == bytes(cmd)
+
+
+@pytest.mark.asyncio
+async def test_execute_resolve_immediately(conn):
+	result = await conn.execute('set', 'mykey', 'foo')
+	assert True is result
+	result = await conn.execute('exists', 'mykey')
+	assert 1 == result
+	result = await conn.execute('get', 'mykey')
+	assert 'foo' == result
+
+
+@pytest.mark.asyncio
+async def test_execute_encoding(conn):
+	result = await conn.execute('set', 'myotherkey', '😀')
+	assert True is result
+	result = await conn.execute('get', 'myotherkey')
+	assert '😀' == result
+
+	korean = '훈민정음'
+	encoded = korean.encode('iso2022_kr')
+	result = await conn.execute('set', 'myotherkey', encoded)
+	assert True is result
+	result = await conn.execute('get', 'myotherkey', encoding='iso2022_kr')
+	assert '훈민정음' == result
