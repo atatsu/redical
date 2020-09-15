@@ -3,7 +3,7 @@ import socket
 
 import pytest  # type: ignore
 
-from redical import create_connection
+from redical import create_connection, create_redical
 
 
 @pytest.fixture
@@ -36,3 +36,12 @@ def unix_socket():
 	with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
 		s.bind('/tmp/tests.sock')
 		return '/tmp/tests.sock'
+
+
+@pytest.fixture
+async def redical(redis_uri):
+	_redical = await create_redical(redis_uri)
+	await _redical.flushdb()
+	yield _redical
+	_redical.close()
+	await _redical.wait_closed()

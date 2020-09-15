@@ -114,6 +114,10 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 		elif isinstance(arg, str):
 			# FIXME: encoding
 			_arg = arg.encode()
+		elif isinstance(arg, int):
+			_arg = b'%d' % arg
+		else:
+			raise NotImplementedError(f'Unable to encode type {type(arg)}')
 		cmd.extend(b'$%d\r\n' % len(_arg))
 		cmd.extend(b'%s\r\n' % _arg)
 	return cmd
@@ -177,6 +181,7 @@ class Connection(AbstractConnection):
 
 	async def execute(self, command: AnyStr, *args: Any, encoding: str = 'utf-8', **kwargs: Any) -> Any:
 		cmd: bytes = _build_command(command, *args)
+		LOG.debug(f'executing command: {cmd!r}')
 		self._writer.write(cmd)
 		await self._writer.drain()
 		future: 'Future' = asyncio.get_running_loop().create_future()
