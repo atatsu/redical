@@ -39,7 +39,7 @@ async def test_pttl_expire(redical):
 	assert True is await redical.set('mykey', 'foo')
 	await redical.execute('PEXPIRE', 'mykey', 10000)
 	# since we're using milliseconds we'll allow some leeway
-	assert 9990 < await redical.pttl('mykey') < 10000
+	assert 9990 < await redical.pttl('mykey') <= 10000
 
 
 @pytest.mark.asyncio

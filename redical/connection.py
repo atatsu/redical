@@ -126,6 +126,9 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 def _decode(parsed: Any, encoding: str) -> Any:
 	if isinstance(parsed, bytes):
 		return parsed.decode(encoding)
+	elif isinstance(parsed, list):
+		x: Any
+		return [_decode(x, encoding) for x in parsed]
 	return parsed
 
 

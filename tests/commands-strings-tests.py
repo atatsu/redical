@@ -2,11 +2,15 @@ import pytest  # type: ignore
 
 
 @pytest.mark.asyncio
+async def test_incr(redical):
+	assert 1 == await redical.incr('mykey')
+	assert 2 == await redical.incr('mykey')
+
+
+@pytest.mark.asyncio
 async def test_set_basic(redical):
-	result = await redical.set('mykey', 'foo and a bar')
-	assert True is result
-	result = await redical.execute('get', 'mykey')
-	assert 'foo and a bar' == result
+	assert True is await redical.set('mykey', 'foo and a bar')
+	assert 'foo and a bar' == await redical.execute('get', 'mykey')
 
 
 @pytest.mark.asyncio
@@ -51,10 +55,10 @@ async def test_set_expire_in_seconds(redical):
 async def test_set_expire_in_milliseconds(redical):
 	assert True is await redical.set('mykey', 'foo', expire_in_milliseconds=10000)
 	# give some leeway since we're in milliseconds
-	assert 9990 < await redical.pttl('mykey') < 10000
+	assert 9990 < await redical.pttl('mykey') <= 10000
 
 
 @pytest.mark.asyncio
 async def test_set_expire_in_seconds_converted_milliseconds(redical):
 	assert True is await redical.set('mykey', 'foo', expire_in_seconds=5.5)
-	assert 5490 < await redical.pttl('mykey') < 5500
+	assert 5490 < await redical.pttl('mykey') <= 5500

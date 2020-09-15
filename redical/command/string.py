@@ -8,6 +8,18 @@ async def _set_convert_to_bool(coro: Awaitable[Any]) -> bool:
 
 
 class StringCommandsMixin(BaseMixin):
+	def incr(self, key: str) -> Awaitable[int]:
+		"""
+		Increments the number stored at `key` by one.
+
+		Args:
+			key: Name of the key to increment.
+
+		Returns:
+			The value of `key` after the increment.
+		"""
+		return self.execute('INCR', key)
+
 	def set(
 		self,
 		key: str,

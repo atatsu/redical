@@ -5,6 +5,7 @@ from typing import Any, AnyStr, Awaitable, Optional, Tuple, Union, TYPE_CHECKING
 from .command import (
 	KeyCommandsMixin,
 	ServerCommandsMixin,
+	SetCommandsMixin,
 	StringCommandsMixin,
 )
 from .connection import create_connection
@@ -29,6 +30,7 @@ async def create_redical(
 class Redical(
 	KeyCommandsMixin,
 	ServerCommandsMixin,
+	SetCommandsMixin,
 	StringCommandsMixin,
 ):
 	_conn: 'Connection'

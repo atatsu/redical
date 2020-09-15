@@ -5,6 +5,3 @@ An asyncio-compatible library for communicating with *redis*.
 
 ## TODO
 * pipelines
-* incr
-* smembers
-* srem
