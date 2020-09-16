@@ -44,7 +44,7 @@ class StringCommandsMixin(BaseMixin):
 		* stralgo
 		* strlen
 	"""
-	def get(self, key: str) -> Awaitable[str]:
+	def get(self, key: str, **kwargs: Any) -> Awaitable[str]:
 		"""
 		Retrieve the value of a key.
 
@@ -57,9 +57,9 @@ class StringCommandsMixin(BaseMixin):
 		Raises:
 			InvalidKeyError: If the supplied `key` does not exist.
 		"""
-		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key))
+		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key), **kwargs)
 
-	def incr(self, key: str) -> Awaitable[int]:
+	def incr(self, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Increments the number stored at `key` by one.
 
@@ -69,7 +69,7 @@ class StringCommandsMixin(BaseMixin):
 		Returns:
 			The value of `key` after the increment.
 		"""
-		return self.execute('INCR', key)
+		return self.execute('INCR', key, **kwargs)
 
 	def set(
 		self,
@@ -81,6 +81,7 @@ class StringCommandsMixin(BaseMixin):
 		only_if_exists: bool = False,
 		only_if_not_exists: bool = False,
 		keep_ttl: bool = False,
+		**kwargs: Any
 	) -> Awaitable[bool]:
 		"""
 		Set `key` to hold the string `value`. If `key` already holds a value it is overwritten,
@@ -124,5 +125,7 @@ class StringCommandsMixin(BaseMixin):
 			additional_args.extend(['PX', int(expire_in_seconds * 1000)])
 		if expire_in_milliseconds is not None:
 			additional_args.extend(['PX', int(expire_in_milliseconds)])
+		if bool(keep_ttl):
+			additional_args.append('KEEPTTL')
 
-		return self.execute('SET', key, value, *additional_args, conversion_func=_set_convert_to_bool)
+		return self.execute('SET', key, value, *additional_args, conversion_func=_set_convert_to_bool, **kwargs)

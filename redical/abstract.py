@@ -1,6 +1,5 @@
 from abc import abstractmethod, ABC
-from asyncio import Future
-from typing import Any, AnyStr, List, Optional, Tuple
+from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple
 
 __all__: List[str] = ['AbstractConnection', 'AbstractParser', 'AbstractPool']
 
@@ -30,15 +29,22 @@ class AbstractConnection(ABC):
 		Index of currently selected DB.
 		"""
 
-	# @property
-	# @abstractmethod
-	# def encoding(self) -> Optional[str]:
-	#     """
-	#     Connection's encoding, if one was specified.
-	#     """
+	@property
+	@abstractmethod
+	def encoding(self) -> Optional[str]:
+		"""
+		Connection's encoding, if one was specified.
+		"""
 
 	@abstractmethod
-	async def execute(self, command: AnyStr, *args: Any, **kwargs: Any) -> Future:
+	def execute(
+		self,
+		command: AnyStr,
+		*args: Any,
+		conversion_func: Optional[Callable[[Any], Any]] = None,
+		encoding: str = 'utf-8',
+		**kwargs: Any
+	) -> Awaitable[Any]:
 		"""
 		Execute a redis command.
 		"""

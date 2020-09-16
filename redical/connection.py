@@ -6,11 +6,14 @@ from collections import deque
 from dataclasses import dataclass
 from types import TracebackType
 from typing import (
+	cast,
 	Any,
 	AnyStr,
+	Awaitable,
 	Callable,
 	Deque,
 	Final,
+	Generator,
 	List,
 	NamedTuple,
 	Optional,
@@ -24,6 +27,7 @@ from urllib.parse import unquote
 from yarl import URL
 
 from .abstract import AbstractConnection, AbstractParser
+from .exception import PipelineError
 from .parser import Parser
 
 ConversionFunc = Callable[[Any], Any]
@@ -42,6 +46,10 @@ class Address(NamedTuple):
 	scheme: Optional[str]
 
 
+class undefined:
+	pass
+
+
 @dataclass
 class Resolver:
 	encoding: str
@@ -51,11 +59,13 @@ class Resolver:
 
 # TODO: SSL
 # TODO: passwords
+# TODO: connection timeout
 
 async def create_connection(
 	address_or_uri: Union[Tuple[str, int], str],
 	*,
 	db: int = 0,
+	encoding: str = 'utf-8',
 	parser: Optional[AbstractParser] = None
 ) -> Connection:
 	"""
@@ -94,7 +104,7 @@ async def create_connection(
 
 	if parser is None:
 		parser = Parser()
-	conn: Connection = Connection(reader, writer, address=(address[0], address[1]), parser=parser)
+	conn: Connection = Connection(reader, writer, address=(address[0], address[1]), encoding=encoding, parser=parser)
 	LOG.info(f'Successfully connected to {address}')
 	return conn
 
@@ -148,20 +158,61 @@ def _decode(parsed: Any, encoding: str, conversion_func: Optional[ConversionFunc
 	return parsed
 
 
+if TYPE_CHECKING:
+	WrapperBase = asyncio.Future
+else:
+	WrapperBase = object
+
+
+class PipelineFutureWrapper(WrapperBase):
+	"""
+	Wraps a future being used by `Connection.execute` when in pipeline mode.
+	If awaited before the pipeline is in its final stage an exception will be raised.
+	This prevents the premature await from blocking forever.
+
+	Awaiting one of the pipeline futures inside the pipeline block itself would prevent
+	the pipeline command from being sent which in turn would prevent the pipeline futures
+	from ever being resolved.
+	"""
+	_future: 'Future'
+	_pipeline_in_progress: bool
+
+	def __init__(self, future: 'Future') -> None:
+		self._future = future
+		self._pipeline_in_progress = True
+
+	def clear_in_progress(self) -> None:
+		self._pipeline_in_progress = False
+
+	def __getattr__(self, attr: str) -> Any:
+		return getattr(self._future, attr)
+
+	def __await__(self) -> Generator[None, None, Any]:
+		if self._pipeline_in_progress:
+			LOG.warning("'await' detected inside pipeline block")
+			raise PipelineError('Do not await Redical method calls inside a pipeline block!')
+		return self._future.__await__()
+
+	def __repr__(self) -> str:
+		return self._future.__repr__()
+
+
 class Connection(AbstractConnection):
 	"""
 	"""
 	_address: Tuple[str, int]
 	_closing: bool
 	_db: int
+	_encoding: str
 	_in_pipeline: bool
 	_parser: AbstractParser
 	_pipeline_buffer: bytearray
 	_reader: 'StreamReader'
-	_reader_state: asyncio.Event
+	_read_data_cancel_event: asyncio.Event
 	_read_data_task: 'Task'
 	_resolvers: Deque[Resolver]
 	_writer: 'StreamWriter'
+	_writer_state: asyncio.Event
 
 	@property
 	def address(self) -> Tuple[str, int]:
@@ -170,6 +221,10 @@ class Connection(AbstractConnection):
 	@property
 	def db(self) -> int:
 		return self._db
+
+	@property
+	def encoding(self) -> str:
+		return self._encoding
 
 	@property
 	def is_closed(self) -> bool:
@@ -182,11 +237,13 @@ class Connection(AbstractConnection):
 		/,
 		*,
 		address: Tuple[str, int],
+		encoding: str,
 		parser: AbstractParser
 	) -> None:
 		self._address = address
 		self._closing = False
 		self._db = 0
+		self._encoding = encoding
 		self._in_pipeline = False
 		self._parser = parser
 		self._pipeline_buffer = bytearray()
@@ -202,29 +259,34 @@ class Connection(AbstractConnection):
 		self._read_data_task.cancel()
 		self._closing = True
 
-	async def execute(
+	def execute(
 		self,
 		command: AnyStr,
 		*args: Any,
-		encoding: str = 'utf-8',
 		conversion_func: Optional[ConversionFunc] = None,
+		encoding: Union[Type[undefined], Optional[str]] = undefined,
 		**kwargs: Any
-	) -> Any:
+	) -> Awaitable[Any]:
+		_encoding: Optional[str]
+		if encoding is undefined:
+			_encoding = self._encoding
+		else:
+			_encoding = 'utf-8' if encoding is None else str(encoding)
+
 		cmd: bytes = _build_command(command, *args)
 		if not self._in_pipeline:
 			LOG.debug(f'executing command: {cmd!r}')
 			self._writer.write(cmd)
-			await self._writer.drain()
+			asyncio.create_task(self._writer.drain())
 		else:
 			LOG.debug(f'buffering command: {cmd!r}')
 			self._pipeline_buffer.extend(cmd)
 		future: 'Future' = asyncio.get_running_loop().create_future()
+		if self._in_pipeline:
+			future = PipelineFutureWrapper(future)
 		self._resolvers.append(
-			Resolver(encoding=encoding, future=future, conversion_func=conversion_func)
+			Resolver(encoding=_encoding, future=future, conversion_func=conversion_func)
 		)
-		# if not in multi or pipeline await result immediately
-		if not self._in_pipeline:
-			return await future
 		return future
 
 	async def wait_closed(self) -> None:
@@ -240,16 +302,15 @@ class Connection(AbstractConnection):
 				data: bytes = await self._reader.read(1024)
 				LOG.debug(f'received data: {data!r}')
 				self._parser.feed(data)
-				parsed: Any = self._parser.gets()
-				if parsed is False:
-					continue
-				LOG.debug(f'parsed response object: {parsed}')
-				# TODO: what if there is no future to pop?
-				resolver: Resolver = self._resolvers.popleft()
-				try:
-					resolver.future.set_result(_decode(parsed, resolver.encoding, resolver.conversion_func))
-				except Exception as ex:
-					resolver.future.set_exception(ex)
+				parsed: Any
+				while (parsed := self._parser.gets()) is not False:
+					LOG.debug(f'parsed response object: {parsed}')
+					# TODO: what if there is no future to pop?
+					resolver: Resolver = self._resolvers.popleft()
+					try:
+						resolver.future.set_result(_decode(parsed, resolver.encoding, resolver.conversion_func))
+					except Exception as ex:
+						resolver.future.set_exception(ex)
 			except asyncio.IncompleteReadError:
 				# lost connection to remote host
 				break
@@ -264,16 +325,24 @@ class Connection(AbstractConnection):
 		self._read_data_cancel_event.set()
 
 	async def __aenter__(self) -> None:
+		if self._in_pipeline:
+			raise PipelineError('Already in pipeline mode')
 		self._in_pipeline = True
 		self._pipeline_buffer = bytearray()
 
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
 	) -> Optional[bool]:
+		resolvers: List[Resolver] = list(self._resolvers)
+		resolver: Resolver
+		LOG.debug('writing pipeline buffer')
 		self._writer.write(self._pipeline_buffer)
-		self._pipeline_buffer = bytearray()
 		await self._writer.drain()
 		self._in_pipeline = False
+		for resolver in resolvers:
+			cast(PipelineFutureWrapper, resolver.future).clear_in_progress()
+		self._pipeline_buffer = bytearray()
+		await asyncio.gather(*[resolver.future for resolver in resolvers])
 		return None
 
 	def __repr__(self) -> str:

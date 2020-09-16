@@ -23,10 +23,11 @@ async def create_redical(
 	address_or_uri: Union[Tuple[str, int], str],
 	*,
 	db: int = 0,
+	encoding: str = 'utf-8',
 	parser: Optional['AbstractParser'] = None
 ) -> Redical:
 	conn: 'Connection' = await create_connection(
-		address_or_uri, db=db, parser=parser
+		address_or_uri, db=db, encoding=encoding, parser=parser
 	)
 	return Redical(conn)
 
@@ -42,8 +43,8 @@ class Redical(
 	def __init__(self, conn: 'Connection') -> None:
 		self._conn = conn
 
-	def execute(self, command: AnyStr, *args: Any, encoding: str = 'utf-8', **kwargs: Any) -> Awaitable[Any]:
-		return self._conn.execute(command, *args, encoding=encoding, **kwargs)
+	def execute(self, command: AnyStr, *args: Any, **kwargs: Any) -> Awaitable[Any]:
+		return self._conn.execute(command, *args, **kwargs)
 
 	def close(self) -> None:
 		self._conn.close()

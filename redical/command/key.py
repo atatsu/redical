@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Awaitable
+from typing import Any, Awaitable
 
 from .base import BaseMixin
 from ..exception import InvalidKeyError, NoExpiryError
@@ -46,7 +46,7 @@ class KeyCommandsMixin(BaseMixin):
 		* wait
 		* scan
 	"""
-	def exists(self, *keys: str) -> Awaitable[int]:
+	def exists(self, *keys: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Return a count for the number of supplied keys that exist.
 
@@ -60,9 +60,9 @@ class KeyCommandsMixin(BaseMixin):
 			multiple times. So if `somekey` exists, `Redical.exists('somekey', 'somekey')`
 			will return `2`.
 		"""
-		return self.execute('EXISTS', *keys)
+		return self.execute('EXISTS', *keys, **kwargs)
 
-	def pttl(self, key: str) -> Awaitable[int]:
+	def pttl(self, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in milliseconds.
 
@@ -76,9 +76,9 @@ class KeyCommandsMixin(BaseMixin):
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return self.execute('PTTL', key, conversion_func=partial(_pttl_error_wrapper, key=key))
+		return self.execute('PTTL', key, conversion_func=partial(_pttl_error_wrapper, key=key), **kwargs)
 
-	def ttl(self, key: str) -> Awaitable[int]:
+	def ttl(self, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in seconds.
 
@@ -92,4 +92,4 @@ class KeyCommandsMixin(BaseMixin):
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return self.execute('TTL', key, conversion_func=partial(_ttl_error_wrapper, key=key))
+		return self.execute('TTL', key, conversion_func=partial(_ttl_error_wrapper, key=key), **kwargs)

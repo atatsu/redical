@@ -1,6 +1,6 @@
 import pytest  # type: ignore
 
-from redical import InvalidKeyError
+from redical import InvalidKeyError, NoExpiryError
 
 
 @pytest.mark.asyncio
@@ -76,3 +76,17 @@ async def test_set_expire_in_milliseconds(redical):
 async def test_set_expire_in_seconds_converted_milliseconds(redical):
 	assert True is await redical.set('mykey', 'foo', expire_in_seconds=5.5)
 	assert 5490 < await redical.pttl('mykey') <= 5500
+
+
+@pytest.mark.asyncio
+async def test_set_keep_ttl(redical):
+	assert True is await redical.set('mykey', 'foo', expire_in_seconds=10)
+	assert True is await redical.set('mykey', 'bar')
+	try:
+		await redical.ttl('mykey')
+	except NoExpiryError:
+		pass
+
+	assert True is await redical.set('mykey', 'foo', expire_in_seconds=10)
+	assert True is await redical.set('mykey', 'bar', keep_ttl=True)
+	assert 10 == await redical.ttl('mykey')

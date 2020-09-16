@@ -28,7 +28,7 @@ class SetCommandsMixin(BaseMixin):
 		* sunionstore
 		* sscan
 	"""
-	def smembers(self, key: str) -> Awaitable[Set[Any]]:
+	def smembers(self, key: str, **kwargs: Any) -> Awaitable[Set[Any]]:
 		"""
 		Returns all the members of the set value stored at `key`.
 
@@ -38,9 +38,9 @@ class SetCommandsMixin(BaseMixin):
 		Returns:
 			All elements of the set.
 		"""
-		return self.execute('SMEMBERS', key, conversion_func=_smembers_convert_to_set)
+		return self.execute('SMEMBERS', key, conversion_func=_smembers_convert_to_set, **kwargs)
 
-	def srem(self, key: str, *members: AnyStr) -> Awaitable[int]:
+	def srem(self, key: str, *members: AnyStr, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Remove the specified members from teh set stored at `key`.
 
@@ -52,4 +52,4 @@ class SetCommandsMixin(BaseMixin):
 			The number of members that were removed from the set, not including
 				non-existing members.
 		"""
-		return self.execute('SREM', key, *members)
+		return self.execute('SREM', key, *members, **kwargs)

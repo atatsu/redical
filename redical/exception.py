@@ -4,6 +4,7 @@ __all__: List[str] = [
 	'RedicalError',
 	'InvalidKeyError',
 	'NoExpiryError',
+	'PipelineError',
 ]
 
 
@@ -33,3 +34,8 @@ class NoExpiryError(KeyError):
 	"""
 	def __init__(self, key: str) -> None:
 		super().__init__(key, f'Key with name {key!r} has no expiry set')
+
+
+class PipelineError(RedicalError):
+	"""
+	"""

@@ -6,7 +6,7 @@ from urllib.parse import quote
 import pytest  # type: ignore
 from yarl import URL
 
-from redical import create_connection, Connection
+from redical import create_connection, create_redical, Connection, PipelineError
 from redical.connection import _build_command
 
 
@@ -149,8 +149,14 @@ async def test_execute_resolve_immediately(conn):
 	assert 'foo' == result
 
 
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Encoding-specific tests
+
 @pytest.mark.asyncio
 async def test_execute_encoding(conn):
+	"""
+	Custom encoding passed via the `execute` method.
+	"""
 	result = await conn.execute('set', 'myotherkey', '😀')
 	assert True is result
 	result = await conn.execute('get', 'myotherkey')
@@ -164,19 +170,74 @@ async def test_execute_encoding(conn):
 	assert '훈민정음' == result
 
 
+@pytest.mark.asyncio
+async def test_execute_encoding_conn(redis_uri):
+	"""
+	Custom encoding passed via connection creation.
+	"""
+	redical = await create_redical(redis_uri, encoding='iso2022_kr')
+	await redical.flushdb()
+	korean = '훈민정음'
+	encoded = korean.encode('iso2022_kr')
+	await redical.set('mykey', encoded)
+	assert '훈민정음' == await redical.get('mykey')
+	redical.close()
+	await redical.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_execute_encoding_conn_override(redis_uri):
+	"""
+	Custom encoding passed via `execute` method overriding instance setting.
+	"""
+	redical = await create_redical(redis_uri, encoding='iso2022_kr')
+	await redical.flushdb()
+	await redical.set('mykey', '훈민정음')
+	assert '훈민정음' == await redical.get('mykey', encoding=None)
+	redical.close()
+	await redical.wait_closed()
+
+
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Pipelines
 
-# @pytest.mark.asyncio
-# async def test_pipeline(redical):
-#     async with redical:
-#         fut1 = redical.set('a', 'foo')
-#         fut2 = redical.set('b', 'bar')
-#         fut3 = redical.set('c', 'baz')
-#     assert 'foo' == await redical.get('a')
-#     assert 'bar' == await redical.get('b')
-#     assert 'baz' == await redical.get('c')
+@pytest.mark.asyncio
+async def test_pipeline(redical):
+	async with redical:
+		fut1 = redical.set('a', 'foo')
+		fut2 = redical.set('b', 'bar')
+		fut3 = redical.set('c', 'baz')
+		fut4 = redical.get('a')
 
-#     assert 'foo' == await fut1
-#     assert 'bar' == await fut2
-#     assert 'baz' == await fut3
+	assert 'foo' == await redical.get('a')
+	assert 'bar' == await redical.get('b')
+	assert 'baz' == await redical.get('c')
+
+	assert True is await fut1
+	assert True is await fut2
+	assert True is await fut3
+	assert 'foo' == await fut4
+
+
+@pytest.mark.asyncio
+async def test_pipeline_improper_await(redical):
+	async with redical:
+		fut1 = redical.set('a', 'foo')
+		with pytest.raises(PipelineError, match='Do not await Redical method calls inside a pipeline block!'):
+			await redical.set('b', 'bar')
+		fut2 = redical.set('c', 'baz')
+
+	assert 'foo' == await redical.get('a')
+	assert 'bar' == await redical.get('b')
+	assert 'baz' == await redical.get('c')
+
+	assert True is await fut1
+	assert True is await fut2
+
+
+@pytest.mark.asyncio
+async def test_pipeline_already_in_pipeline(redical):
+	async with redical:
+		with pytest.raises(PipelineError, match='Already in pipeline mode'):
+			async with redical:
+				pass
