@@ -4,7 +4,21 @@ import asyncio
 import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, AnyStr, Deque, Final, List, NamedTuple, Optional, Tuple, Union, TYPE_CHECKING
+from types import TracebackType
+from typing import (
+	Any,
+	AnyStr,
+	Callable,
+	Deque,
+	Final,
+	List,
+	NamedTuple,
+	Optional,
+	Tuple,
+	Type,
+	Union,
+	TYPE_CHECKING,
+)
 from urllib.parse import unquote
 
 from yarl import URL
@@ -12,21 +26,14 @@ from yarl import URL
 from .abstract import AbstractConnection, AbstractParser
 from .parser import Parser
 
+ConversionFunc = Callable[[Any], Any]
+
 if TYPE_CHECKING:
 	from asyncio import Future, StreamReader, StreamWriter, Task
 
 __all__: List[str] = ['create_connection', 'Address', 'Connection']
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
-
-# Simple Strings are encoded in the following way: a plus character, followed by a string that cannot
-# contain a CR or LF character (no newlines are allowed), terminated by CRLF (that is "\r\n").
-SIMPLE_STRING: Final[str] = '+'
-ERROR: Final[str] = '-'
-INTEGER: Final[str] = ':'
-BULK_STRING: Final[str] = '$'
-ARRAY: Final[str] = '*'
-TERMINATE: Final[str] = '\r\n'
 
 
 class Address(NamedTuple):
@@ -36,9 +43,10 @@ class Address(NamedTuple):
 
 
 @dataclass
-class EncodingFuture:
+class Resolver:
 	encoding: str
 	future: 'Future'
+	conversion_func: Optional[ConversionFunc] = None
 
 
 # TODO: SSL
@@ -123,12 +131,20 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 	return cmd
 
 
-def _decode(parsed: Any, encoding: str) -> Any:
+def _decode(parsed: Any, encoding: str, conversion_func: Optional[ConversionFunc] = None) -> Any:
 	if isinstance(parsed, bytes):
-		return parsed.decode(encoding)
+		decoded: str = parsed.decode(encoding)
+		if callable(conversion_func):
+			return conversion_func(decoded)
+		return decoded
 	elif isinstance(parsed, list):
 		x: Any
-		return [_decode(x, encoding) for x in parsed]
+		decoded_members: List[Any] = [_decode(x, encoding) for x in parsed]
+		if callable(conversion_func):
+			return conversion_func(decoded_members)
+
+	if callable(conversion_func):
+		return conversion_func(parsed)
 	return parsed
 
 
@@ -137,12 +153,14 @@ class Connection(AbstractConnection):
 	"""
 	_address: Tuple[str, int]
 	_closing: bool
-	_encoding_futures: Deque[EncodingFuture]
 	_db: int
+	_in_pipeline: bool
 	_parser: AbstractParser
+	_pipeline_buffer: bytearray
 	_reader: 'StreamReader'
 	_reader_state: asyncio.Event
 	_read_data_task: 'Task'
+	_resolvers: Deque[Resolver]
 	_writer: 'StreamWriter'
 
 	@property
@@ -169,12 +187,14 @@ class Connection(AbstractConnection):
 		self._address = address
 		self._closing = False
 		self._db = 0
-		self._encoding_futures = deque()
+		self._in_pipeline = False
 		self._parser = parser
+		self._pipeline_buffer = bytearray()
 		self._reader = reader
 		self._read_data_cancel_event = asyncio.Event()
 		self._read_data_task = asyncio.create_task(self._read_data())
 		self._read_data_task.add_done_callback(self._set_read_state)
+		self._resolvers = deque()
 		self._writer = writer
 
 	def close(self) -> None:
@@ -182,15 +202,30 @@ class Connection(AbstractConnection):
 		self._read_data_task.cancel()
 		self._closing = True
 
-	async def execute(self, command: AnyStr, *args: Any, encoding: str = 'utf-8', **kwargs: Any) -> Any:
+	async def execute(
+		self,
+		command: AnyStr,
+		*args: Any,
+		encoding: str = 'utf-8',
+		conversion_func: Optional[ConversionFunc] = None,
+		**kwargs: Any
+	) -> Any:
 		cmd: bytes = _build_command(command, *args)
-		LOG.debug(f'executing command: {cmd!r}')
-		self._writer.write(cmd)
-		await self._writer.drain()
+		if not self._in_pipeline:
+			LOG.debug(f'executing command: {cmd!r}')
+			self._writer.write(cmd)
+			await self._writer.drain()
+		else:
+			LOG.debug(f'buffering command: {cmd!r}')
+			self._pipeline_buffer.extend(cmd)
 		future: 'Future' = asyncio.get_running_loop().create_future()
-		self._encoding_futures.append(EncodingFuture(encoding=encoding, future=future))
+		self._resolvers.append(
+			Resolver(encoding=encoding, future=future, conversion_func=conversion_func)
+		)
 		# if not in multi or pipeline await result immediately
-		return await future
+		if not self._in_pipeline:
+			return await future
+		return future
 
 	async def wait_closed(self) -> None:
 		if not self._closing:
@@ -202,10 +237,6 @@ class Connection(AbstractConnection):
 	async def _read_data(self) -> None:
 		while not self._reader.at_eof():
 			try:
-				# XXX: I'm not sure if this is a good idea or not. Depending on the command that was
-				#      sent the RESP response could contain a ton of these which would mean there
-				#      would need to be *several* iterations of this loop in order to retrieve the
-				#      entire response.
 				data: bytes = await self._reader.read(1024)
 				LOG.debug(f'received data: {data!r}')
 				self._parser.feed(data)
@@ -214,8 +245,11 @@ class Connection(AbstractConnection):
 					continue
 				LOG.debug(f'parsed response object: {parsed}')
 				# TODO: what if there is no future to pop?
-				encoding_future: EncodingFuture = self._encoding_futures.popleft()
-				encoding_future.future.set_result(_decode(parsed, encoding_future.encoding))
+				resolver: Resolver = self._resolvers.popleft()
+				try:
+					resolver.future.set_result(_decode(parsed, resolver.encoding, resolver.conversion_func))
+				except Exception as ex:
+					resolver.future.set_exception(ex)
 			except asyncio.IncompleteReadError:
 				# lost connection to remote host
 				break
@@ -228,6 +262,19 @@ class Connection(AbstractConnection):
 	def _set_read_state(self, read_data_task: 'Task') -> None:
 		LOG.debug('read task successfully cancelled')
 		self._read_data_cancel_event.set()
+
+	async def __aenter__(self) -> None:
+		self._in_pipeline = True
+		self._pipeline_buffer = bytearray()
+
+	async def __aexit__(
+		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
+	) -> Optional[bool]:
+		self._writer.write(self._pipeline_buffer)
+		self._pipeline_buffer = bytearray()
+		await self._writer.drain()
+		self._in_pipeline = False
+		return None
 
 	def __repr__(self) -> str:
 		return f'Connection(db={self._db})'

@@ -1,13 +1,64 @@
+from functools import partial
 from typing import Any, AnyStr, Awaitable, List, Optional, Union
 
 from .base import BaseMixin
+from ..exception import InvalidKeyError
 
 
-async def _set_convert_to_bool(coro: Awaitable[Any]) -> bool:
-	return bool(await coro)
+def _set_convert_to_bool(response: Optional[str]) -> bool:
+	return bool(response)
+
+
+def _get_error_wrapper(response: Optional[Any], *, key: str) -> Any:
+	if response is None:
+		raise InvalidKeyError(key)
+	return response
 
 
 class StringCommandsMixin(BaseMixin):
+	"""
+	Implemented commands:
+		* get
+		* incr
+		* set [psetex, setex]
+
+	TODO:
+		* append
+		* bitcount
+		* bitfield
+		* bitop
+		* bitpos
+		* decr
+		* decrby
+		* getbit
+		* getrange
+		* getset
+		* incrby
+		* incrbyfloat
+		* mget
+		* mset
+		* msetnx
+		* setbit
+		* setnx
+		* setrange
+		* stralgo
+		* strlen
+	"""
+	def get(self, key: str) -> Awaitable[str]:
+		"""
+		Retrieve the value of a key.
+
+		Args:
+			key: Name of the key whose data to fetch.
+
+		Returns:
+			The string stored at `key`.
+
+		Raises:
+			InvalidKeyError: If the supplied `key` does not exist.
+		"""
+		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key))
+
 	def incr(self, key: str) -> Awaitable[int]:
 		"""
 		Increments the number stored at `key` by one.
@@ -74,4 +125,4 @@ class StringCommandsMixin(BaseMixin):
 		if expire_in_milliseconds is not None:
 			additional_args.extend(['PX', int(expire_in_milliseconds)])
 
-		return _set_convert_to_bool(self.execute('SET', key, value, *additional_args))
+		return self.execute('SET', key, value, *additional_args, conversion_func=_set_convert_to_bool)

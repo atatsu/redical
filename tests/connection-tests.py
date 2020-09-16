@@ -162,3 +162,21 @@ async def test_execute_encoding(conn):
 	assert True is result
 	result = await conn.execute('get', 'myotherkey', encoding='iso2022_kr')
 	assert '훈민정음' == result
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Pipelines
+
+# @pytest.mark.asyncio
+# async def test_pipeline(redical):
+#     async with redical:
+#         fut1 = redical.set('a', 'foo')
+#         fut2 = redical.set('b', 'bar')
+#         fut3 = redical.set('c', 'baz')
+#     assert 'foo' == await redical.get('a')
+#     assert 'bar' == await redical.get('b')
+#     assert 'baz' == await redical.get('c')
+
+#     assert 'foo' == await fut1
+#     assert 'bar' == await fut2
+#     assert 'baz' == await fut3

@@ -1,13 +1,33 @@
-from typing import Any, AnyStr, Awaitable, List, Set
+from typing import Any, AnyStr, Awaitable, Set, Sequence
 
 from .base import BaseMixin
 
 
-async def _smembers_convert_to_set(coro: Awaitable[List[Any]]) -> Set[Any]:
-	return set(await coro)
+def _smembers_convert_to_set(response: Sequence[Any]) -> Set[Any]:
+	return set(response)
 
 
 class SetCommandsMixin(BaseMixin):
+	"""
+	Implemented commands:
+		* smembers
+		* srem
+
+	TODO:
+		* sadd
+		* scard
+		* sdiff
+		* sdiffstore
+		* sinter
+		* sinterstore
+		* sismember
+		* smove
+		* spop
+		* srandmember
+		* sunion
+		* sunionstore
+		* sscan
+	"""
 	def smembers(self, key: str) -> Awaitable[Set[Any]]:
 		"""
 		Returns all the members of the set value stored at `key`.
@@ -18,7 +38,7 @@ class SetCommandsMixin(BaseMixin):
 		Returns:
 			All elements of the set.
 		"""
-		return _smembers_convert_to_set(self.execute('SMEMBERS', key))
+		return self.execute('SMEMBERS', key, conversion_func=_smembers_convert_to_set)
 
 	def srem(self, key: str, *members: AnyStr) -> Awaitable[int]:
 		"""

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, AnyStr, Awaitable, Optional, Tuple, Union, TYPE_CHECKING
+import logging
+from types import TracebackType
+from typing import Any, AnyStr, Awaitable, Final, Optional, Tuple, Type, Union, TYPE_CHECKING
 
 from .command import (
 	KeyCommandsMixin,
@@ -13,6 +15,8 @@ from .connection import create_connection
 if TYPE_CHECKING:
 	from .abstract import AbstractParser
 	from .connection import Connection
+
+LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 async def create_redical(
@@ -46,3 +50,11 @@ class Redical(
 
 	async def wait_closed(self) -> None:
 		await self._conn.wait_closed()
+
+	async def __aenter__(self) -> None:
+		await self._conn.__aenter__()
+
+	async def __aexit__(
+		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
+	) -> Optional[bool]:
+		return await self._conn.__aexit__(exc_type, exc, tb)

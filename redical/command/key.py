@@ -1,20 +1,51 @@
+from functools import partial
 from typing import Awaitable
 
 from .base import BaseMixin
 from ..exception import InvalidKeyError, NoExpiryError
 
 
-async def _ttl_error_wrapper(key: str, coro: Awaitable[int]) -> int:
-	result: int = await coro
-	if result == -2:
-		raise InvalidKeyError(key, message=f'Key with name {key!r} does not exist')
-	elif result == -1:
-		raise NoExpiryError(key, message=f'Key with name {key!r} has no expiry set')
-	return result
+def _ttl_error_wrapper(response: int, *, key: str) -> int:
+	if response == -2:
+		raise InvalidKeyError(key)
+	elif response == -1:
+		raise NoExpiryError(key)
+	return response
+
+
 _pttl_error_wrapper = _ttl_error_wrapper
 
 
 class KeyCommandsMixin(BaseMixin):
+	"""
+	Implemented commands:
+		* exists
+		* pttl
+		* ttl
+
+	TODO:
+		* del
+		* dump
+		* expire
+		* expireat
+		* keys
+		* migrate
+		* move
+		* object
+		* persist
+		* pexpire
+		* pexpireat
+		* randomkey
+		* rename
+		* renamenx
+		* restore
+		* sort
+		* touch
+		* type
+		* unlink
+		* wait
+		* scan
+	"""
 	def exists(self, *keys: str) -> Awaitable[int]:
 		"""
 		Return a count for the number of supplied keys that exist.
@@ -45,7 +76,7 @@ class KeyCommandsMixin(BaseMixin):
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return _pttl_error_wrapper(key, self.execute('PTTL', key))
+		return self.execute('PTTL', key, conversion_func=partial(_pttl_error_wrapper, key=key))
 
 	def ttl(self, key: str) -> Awaitable[int]:
 		"""
@@ -61,4 +92,4 @@ class KeyCommandsMixin(BaseMixin):
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return _ttl_error_wrapper(key, self.execute('TTL', key))
+		return self.execute('TTL', key, conversion_func=partial(_ttl_error_wrapper, key=key))

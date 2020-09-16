@@ -4,6 +4,10 @@ from .base import BaseMixin
 
 
 class ServerCommandsMixin(BaseMixin):
+	"""
+	Implemented commands:
+		* flushdb
+	"""
 	def flushdb(self) -> Awaitable[bool]:
 		"""
 		Delete all the keys of the currently selected DB.

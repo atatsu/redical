@@ -1,5 +1,19 @@
 import pytest  # type: ignore
 
+from redical import InvalidKeyError
+
+
+@pytest.mark.asyncio
+async def test_get(redical):
+	assert True is await redical.set('mykey', 'foo')
+	assert 'foo' == await redical.get('mykey')
+
+
+@pytest.mark.asyncio
+async def test_get_no_key(redical):
+	with pytest.raises(InvalidKeyError, match="Key with name 'mykey' does not exist"):
+		await redical.get('mykey')
+
 
 @pytest.mark.asyncio
 async def test_incr(redical):
