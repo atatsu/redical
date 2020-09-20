@@ -1,12 +1,20 @@
 import asyncio
 from dataclasses import dataclass
 from typing import Any, Tuple
+from unittest import mock
 from urllib.parse import quote
 
-import pytest  # type: ignore
+import pytest
 from yarl import URL
 
-from redical import create_connection, create_redical, Connection, PipelineError
+from redical import (
+	create_connection,
+	create_redical,
+	Connection,
+	ConnectionClosedError,
+	ConnectionClosingError,
+	PipelineError,
+)
 from redical.connection import _build_command
 
 
@@ -66,8 +74,12 @@ async def disconnecting_server(unused_port):
 async def conn(redis_uri):
 	conn = await create_connection(redis_uri)
 	yield conn
-	conn.close()
-	await conn.wait_closed()
+	if not conn.is_closed and conn.is_closing:
+		await conn.wait_closed()
+		return
+	if not conn.is_closed:
+		conn.close()
+		await conn.wait_closed()
 
 
 @pytest.mark.asyncio
@@ -147,6 +159,50 @@ async def test_execute_resolve_immediately(conn):
 	assert 1 == result
 	result = await conn.execute('get', 'mykey')
 	assert 'foo' == result
+
+
+@pytest.mark.asyncio
+async def test_conn_double_close(conn):
+	conn.close()
+	with pytest.raises(ConnectionClosingError, match='Connection is already closing'):
+		conn.close()
+
+
+@pytest.mark.asyncio
+async def test_conn_already_closed(conn):
+	conn.close()
+	await conn.wait_closed()
+	with pytest.raises(ConnectionClosedError, match='Connection is already closed'):
+		conn.close()
+
+
+@pytest.mark.asyncio
+async def test_wait_not_closed(conn):
+	with pytest.raises(RuntimeError, match='Connection is not closing'):
+		await conn.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_double_wait_closed(conn):
+	conn.close()
+	await conn.wait_closed()
+	with pytest.raises(RuntimeError, match='Connection is not closing'):
+		await conn.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_execute_closed(conn):
+	conn.close()
+	await conn.wait_closed()
+	with pytest.raises(ConnectionClosedError, match='Connection is closed'):
+		await conn.execute('ping')
+
+
+@pytest.mark.asyncio
+async def test_execute_closing(conn):
+	conn.close()
+	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
+		await conn.execute('ping')
 
 
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
@@ -241,3 +297,30 @@ async def test_pipeline_already_in_pipeline(redical):
 		with pytest.raises(PipelineError, match='Already in pipeline mode'):
 			async with redical:
 				pass
+
+
+@pytest.mark.asyncio
+async def test_pipeline_closed(redical):
+	redical.close()
+	await redical.wait_closed()
+	with pytest.raises(ConnectionClosedError, match='Connection is closed'):
+		async with redical:
+			pass
+
+
+@pytest.mark.asyncio
+async def test_pipeline_closing(redical):
+	redical.close()
+	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
+		async with redical:
+			pass
+
+
+@pytest.mark.asyncio
+async def test_pipeline_no_commands(conn):
+	with mock.patch.object(conn, '_writer') as _writer:
+		_writer.drain = mock.AsyncMock()
+		async with conn:
+			pass
+	_writer.write.assert_not_called()
+	_writer.drain.assert_not_called()

@@ -27,7 +27,7 @@ from urllib.parse import unquote
 from yarl import URL
 
 from .abstract import AbstractConnection, AbstractParser
-from .exception import PipelineError
+from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError
 from .parser import Parser
 
 ConversionFunc = Callable[[Any], Any]
@@ -43,7 +43,6 @@ LOG: Final[logging.Logger] = logging.getLogger(__name__)
 class Address(NamedTuple):
 	host: str
 	port: int
-	scheme: Optional[str]
 
 
 class undefined:
@@ -58,38 +57,44 @@ class Resolver:
 
 
 # TODO: SSL
-# TODO: passwords
+# TODO: password
 # TODO: connection timeout
+# TODO: db passed in uri (only allow in uri *or* keyword arg, but not both)
+# TODO: support other options as uri query params (encoding, max_chunk_size)
 
 async def create_connection(
 	address_or_uri: Union[Tuple[str, int], str],
 	*,
 	db: int = 0,
 	encoding: str = 'utf-8',
+	# theoretical maximum size of a TCP packet
+	max_chunk_size: int = 65535,
 	parser: Optional[AbstractParser] = None
 ) -> Connection:
 	"""
 	"""
 	address: Optional[Address] = None
+	scheme: Optional[str] = None
 	host: str
 	port: int
 	reader: 'StreamReader'
 	writer: 'StreamWriter'
 	if isinstance(address_or_uri, str):
 		url: URL = URL(address_or_uri)
-		if url.scheme in ('redis', 'rediss'):
+		scheme = url.scheme
+		if scheme in ('redis', 'rediss'):
 			host = str(url.host)
 			port = int(str(url.port))
-			address = Address(host, port, url.scheme)
-		elif url.scheme == 'unix':
+			address = Address(host, port)
+		elif scheme == 'unix':
 			if url.host is None:
 				raise NotImplementedError('not a valid unix socket')
 			path: str = unquote(str(url.host))
 			LOG.debug(f'unix scheme {path} ({url})')
-			address = Address(path, 0, url.scheme)
+			address = Address(path, 0)
 	elif isinstance(address_or_uri, (list, tuple)):
 		host, port = address_or_uri
-		address = Address(host, port, None)
+		address = Address(host, port)
 	else:
 		raise NotImplementedError()
 
@@ -97,14 +102,23 @@ async def create_connection(
 		raise NotImplementedError('not a valid address')
 
 	LOG.debug(f'attempting to connect to {address}')
-	if address.scheme != 'unix':
+	if scheme != 'unix':
 		reader, writer = await asyncio.open_connection(address.host, address.port)
 	else:
 		reader, writer = await asyncio.open_unix_connection(address.host)
 
 	if parser is None:
 		parser = Parser()
-	conn: Connection = Connection(reader, writer, address=(address[0], address[1]), encoding=encoding, parser=parser)
+	conn: Connection = Connection(
+		reader,
+		writer,
+		address=address,
+		db=db,
+		encoding=encoding,
+		max_chunk_size=max_chunk_size,
+		parser=parser
+	)
+	# TODO: do a ping to verify connection is good
 	LOG.info(f'Successfully connected to {address}')
 	return conn
 
@@ -174,6 +188,8 @@ class PipelineFutureWrapper(WrapperBase):
 	the pipeline command from being sent which in turn would prevent the pipeline futures
 	from ever being resolved.
 	"""
+	__slots__: Tuple[str, str] = ('_future', '_pipeline_in_progress')
+
 	_future: 'Future'
 	_pipeline_in_progress: bool
 
@@ -205,6 +221,7 @@ class Connection(AbstractConnection):
 	_db: int
 	_encoding: str
 	_in_pipeline: bool
+	_max_chunk_size: int
 	_parser: AbstractParser
 	_pipeline_buffer: bytearray
 	_reader: 'StreamReader'
@@ -227,8 +244,18 @@ class Connection(AbstractConnection):
 		return self._encoding
 
 	@property
+	def in_use(self) -> bool:
+		return len(self._resolvers) > 0
+
+	@property
 	def is_closed(self) -> bool:
-		return self._reader.at_eof() or self._writer.is_closing()
+		# return self._reader.at_eof() or self._writer.is_closing()
+		return self._read_data_cancel_event.is_set() or (self._reader.at_eof() and self._writer.is_closing())
+		# return self._read_data_cancel_event.is_set()
+
+	@property
+	def is_closing(self) -> bool:
+		return self._closing
 
 	def __init__(
 		self,
@@ -237,14 +264,17 @@ class Connection(AbstractConnection):
 		/,
 		*,
 		address: Tuple[str, int],
+		db: int,
 		encoding: str,
+		max_chunk_size: int,
 		parser: AbstractParser
 	) -> None:
 		self._address = address
 		self._closing = False
-		self._db = 0
+		self._db = db
 		self._encoding = encoding
 		self._in_pipeline = False
+		self._max_chunk_size = max_chunk_size
 		self._parser = parser
 		self._pipeline_buffer = bytearray()
 		self._reader = reader
@@ -255,9 +285,15 @@ class Connection(AbstractConnection):
 		self._writer = writer
 
 	def close(self) -> None:
+		if self._closing:
+			raise ConnectionClosingError('Connection is already closing')
+		elif self.is_closed:
+			raise ConnectionClosedError('Connection is already closed')
+
+		self._closing = True
+		LOG.info(f'Connection closing [{self!r}]')
 		self._writer.close()
 		self._read_data_task.cancel()
-		self._closing = True
 
 	def execute(
 		self,
@@ -267,6 +303,11 @@ class Connection(AbstractConnection):
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
 		**kwargs: Any
 	) -> Awaitable[Any]:
+		if self.is_closed:
+			raise ConnectionClosedError()
+		if self.is_closing:
+			raise ConnectionClosingError()
+
 		_encoding: Optional[str]
 		if encoding is undefined:
 			_encoding = self._encoding
@@ -292,14 +333,16 @@ class Connection(AbstractConnection):
 	async def wait_closed(self) -> None:
 		if not self._closing:
 			raise RuntimeError('Connection is not closing')
+
 		await self._writer.wait_closed()
 		await self._read_data_cancel_event.wait()
 		LOG.info(f'Disconnected gracefully from {self.address}')
+		self._closing = False
 
 	async def _read_data(self) -> None:
 		while not self._reader.at_eof():
 			try:
-				data: bytes = await self._reader.read(1024)
+				data: bytes = await self._reader.read(self._max_chunk_size)
 				LOG.debug(f'received data: {data!r}')
 				self._parser.feed(data)
 				parsed: Any
@@ -325,14 +368,22 @@ class Connection(AbstractConnection):
 		self._read_data_cancel_event.set()
 
 	async def __aenter__(self) -> None:
+		if self.is_closed:
+			raise ConnectionClosedError()
+		if self.is_closing:
+			raise ConnectionClosingError()
 		if self._in_pipeline:
 			raise PipelineError('Already in pipeline mode')
+
 		self._in_pipeline = True
 		self._pipeline_buffer = bytearray()
 
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
 	) -> Optional[bool]:
+		if not self._pipeline_buffer:
+			# no commands executed
+			return None
 		resolvers: List[Resolver] = list(self._resolvers)
 		resolver: Resolver
 		LOG.debug('writing pipeline buffer')
@@ -346,4 +397,4 @@ class Connection(AbstractConnection):
 		return None
 
 	def __repr__(self) -> str:
-		return f'Connection(db={self._db})'
+		return f'Connection(address={self._address}, db={self._db})'

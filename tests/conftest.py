@@ -43,5 +43,9 @@ async def redical(redis_uri):
 	_redical = await create_redical(redis_uri)
 	await _redical.flushdb()
 	yield _redical
-	_redical.close()
-	await _redical.wait_closed()
+	if not _redical.is_closed and _redical.is_closing:
+		await _redical.wait_closed()
+		return
+	if not _redical.is_closed:
+		_redical.close()
+		await _redical.wait_closed()

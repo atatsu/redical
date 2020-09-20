@@ -24,12 +24,16 @@ async def create_redical(
 	*,
 	db: int = 0,
 	encoding: str = 'utf-8',
+	max_chunk_size: int = 65535,
 	parser: Optional['AbstractParser'] = None
 ) -> Redical:
 	conn: 'Connection' = await create_connection(
-		address_or_uri, db=db, encoding=encoding, parser=parser
+		address_or_uri, db=db, encoding=encoding, max_chunk_size=max_chunk_size, parser=parser
 	)
 	return Redical(conn)
+
+# TODO:
+# async def create_redical_pool
 
 
 class Redical(
@@ -39,6 +43,14 @@ class Redical(
 	StringCommandsMixin,
 ):
 	_conn: 'Connection'
+
+	@property
+	def is_closed(self) -> bool:
+		return self._conn.is_closed
+
+	@property
+	def is_closing(self) -> bool:
+		return self._conn.is_closing
 
 	def __init__(self, conn: 'Connection') -> None:
 		self._conn = conn
