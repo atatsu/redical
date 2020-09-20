@@ -1,39 +1,53 @@
+from __future__ import annotations
+
 from abc import abstractmethod, ABC
-from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple
+from types import TracebackType
+from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple, Type
 
-__all__: List[str] = ['AbstractConnection', 'AbstractParser', 'AbstractPool']
+__all__: List[str] = ['AbstractParser', 'RedicalResource']
 
 
-class AbstractConnection(ABC):
-	"""
-	Redis connection interface.
-	"""
+class RedicalResource(ABC):
 	@property
 	@abstractmethod
 	def address(self) -> Tuple[str, int]:
 		"""
-		Address being used for the connection.
-		"""
-
-	@property
-	@abstractmethod
-	def is_closed(self) -> bool:
-		"""
-		Indicates whether the connection is closing or already closed.
+		The address being used to connect to Redis by the underlying connection or pool.
 		"""
 
 	@property
 	@abstractmethod
 	def db(self) -> int:
 		"""
-		Index of currently selected DB.
+		Index of the currently selected database being used by the underlying
+		connection or pool.
 		"""
 
 	@property
 	@abstractmethod
 	def encoding(self) -> Optional[str]:
 		"""
-		Connection's encoding, if one was specified.
+		Encoding being used by the underlying connection or pool.
+		"""
+
+	@property
+	@abstractmethod
+	def is_closed(self) -> bool:
+		"""
+		Whether or not the underlying connection or pool is in a closed state.
+		"""
+
+	@property
+	@abstractmethod
+	def is_closing(self) -> bool:
+		"""
+		Whether or not the underlying connection or pool is in a closing state.
+		"""
+
+	@abstractmethod
+	def close(self) -> None:
+		"""
+		Closes the underlying connection or pool.
 		"""
 
 	@abstractmethod
@@ -46,46 +60,26 @@ class AbstractConnection(ABC):
 		**kwargs: Any
 	) -> Awaitable[Any]:
 		"""
-		Execute a redis command.
-		"""
-
-	@abstractmethod
-	def close(self) -> None:
-		"""
-		Close the connection.
+		Execute a Redis command through the underlying connection or pool.
 		"""
 
 	@abstractmethod
 	async def wait_closed(self) -> None:
 		"""
-		Wait until all resources have been cleaned up.
-
-		Should be called after `close()`.
-		"""
-
-
-class AbstractPool(ABC):
-	"""
-	Redis connection pool interface.
-
-	Inherits from `BaseConnection` so that both use the same interface for executing commands.
-	"""
-	@abstractmethod
-	async def acquire_connection(self, command: bytes, *args: Any) -> Optional[AbstractConnection]:
-		"""
-		Asynchronously acquire a connection from the pool.
+		Wait until all the resources have been cleaned up for the underlying connection or pool.
 		"""
 
 	@abstractmethod
-	def acquire_connection_sync(self, command: bytes, *args: Any) -> Optional[AbstractConnection]:
+	async def __aenter__(self) -> RedicalResource:
 		"""
-		Synchronously acquire a connection from the pool.
 		"""
 
 	@abstractmethod
-	def release(self, conn: AbstractConnection) -> None:
+	async def __aexit__(
+		self,
+		exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
+	) -> Optional[bool]:
 		"""
-		Releases a connection to the pool.
 		"""
 
 
@@ -94,11 +88,14 @@ class AbstractParser(ABC):
 	Parsers must conform to the `hiredis.Reader` interface.
 	"""
 	@abstractmethod
-	def feed(self, data: bytes) -> None:
+	def feed(self, data: AnyStr) -> None:
 		"""
+		Add data to the internal buffer.
 		"""
 
 	@abstractmethod
 	def gets(self) -> Any:
 		"""
+		Read buffer and return a reply if the buffer contains a full reply.
+		Otherwise return `False`.
 		"""

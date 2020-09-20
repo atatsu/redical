@@ -3,7 +3,7 @@ import socket
 
 import pytest  # type: ignore
 
-from redical import create_connection, create_redical
+from redical import create_connection, create_redical, create_redical_pool
 
 
 @pytest.fixture
@@ -49,3 +49,16 @@ async def redical(redis_uri):
 	if not _redical.is_closed:
 		_redical.close()
 		await _redical.wait_closed()
+
+
+@pytest.fixture
+async def redical_pool(redis_uri):
+	pool = await create_redical_pool(redis_uri)
+	await pool.flushdb()
+	yield pool
+	if not pool.is_closed and pool.is_closing:
+		await pool.wait_closed()
+		return
+	if not pool.is_closed:
+		pool.close()
+		await pool.wait_closed()

@@ -26,7 +26,7 @@ from urllib.parse import unquote
 
 from yarl import URL
 
-from .abstract import AbstractConnection, AbstractParser
+from .abstract import AbstractParser, RedicalResource
 from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError
 from .parser import Parser
 
@@ -213,7 +213,7 @@ class PipelineFutureWrapper(WrapperBase):
 		return self._future.__repr__()
 
 
-class Connection(AbstractConnection):
+class Connection(RedicalResource):
 	"""
 	"""
 	_address: Tuple[str, int]
@@ -367,7 +367,7 @@ class Connection(AbstractConnection):
 		LOG.debug('read task successfully cancelled')
 		self._read_data_cancel_event.set()
 
-	async def __aenter__(self) -> None:
+	async def __aenter__(self) -> Connection:
 		if self.is_closed:
 			raise ConnectionClosedError()
 		if self.is_closing:
@@ -377,6 +377,7 @@ class Connection(AbstractConnection):
 
 		self._in_pipeline = True
 		self._pipeline_buffer = bytearray()
+		return self
 
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
