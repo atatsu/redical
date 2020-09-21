@@ -276,10 +276,16 @@ async def test_pipeline(redical):
 
 
 @pytest.mark.asyncio
+async def test_pipeline_conn_in_use(conn):
+	async with conn:
+		assert conn.in_use
+
+
+@pytest.mark.asyncio
 async def test_pipeline_improper_await(redical):
 	async with redical:
 		fut1 = redical.set('a', 'foo')
-		with pytest.raises(PipelineError, match='Do not await Redical method calls inside a pipeline block!'):
+		with pytest.raises(PipelineError, match='Do not await connection method calls inside a pipeline block!'):
 			await redical.set('b', 'bar')
 		fut2 = redical.set('c', 'baz')
 
@@ -324,3 +330,4 @@ async def test_pipeline_no_commands(conn):
 			pass
 	_writer.write.assert_not_called()
 	_writer.drain.assert_not_called()
+	assert False is conn._in_pipeline

@@ -206,7 +206,7 @@ class PipelineFutureWrapper(WrapperBase):
 	def __await__(self) -> Generator[None, None, Any]:
 		if self._pipeline_in_progress:
 			LOG.warning("'await' detected inside pipeline block")
-			raise PipelineError('Do not await Redical method calls inside a pipeline block!')
+			raise PipelineError('Do not await connection method calls inside a pipeline block!')
 		return self._future.__await__()
 
 	def __repr__(self) -> str:
@@ -229,7 +229,6 @@ class Connection(RedicalResource):
 	_read_data_task: 'Task'
 	_resolvers: Deque[Resolver]
 	_writer: 'StreamWriter'
-	_writer_state: asyncio.Event
 
 	@property
 	def address(self) -> Tuple[str, int]:
@@ -245,13 +244,11 @@ class Connection(RedicalResource):
 
 	@property
 	def in_use(self) -> bool:
-		return len(self._resolvers) > 0
+		return len(self._resolvers) > 0 or self._in_pipeline
 
 	@property
 	def is_closed(self) -> bool:
-		# return self._reader.at_eof() or self._writer.is_closing()
 		return self._read_data_cancel_event.is_set() or (self._reader.at_eof() and self._writer.is_closing())
-		# return self._read_data_cancel_event.is_set()
 
 	@property
 	def is_closing(self) -> bool:
@@ -384,6 +381,8 @@ class Connection(RedicalResource):
 	) -> Optional[bool]:
 		if not self._pipeline_buffer:
 			# no commands executed
+			self._in_pipeline = False
+			LOG.debug('pipeline exiting with no buffered commands')
 			return None
 		resolvers: List[Resolver] = list(self._resolvers)
 		resolver: Resolver
@@ -398,4 +397,7 @@ class Connection(RedicalResource):
 		return None
 
 	def __repr__(self) -> str:
-		return f'Connection(address={self._address}, db={self._db})'
+		return (
+			f'<Connection(address={self._address}, db={self._db}, is_closed={self.is_closed}, '
+			f'is_closing={self.is_closing})>'
+		)

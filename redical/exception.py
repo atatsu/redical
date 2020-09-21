@@ -76,12 +76,14 @@ class PoolError(RedicalError):
 class PoolClosedError(PoolError):
 	"""
 	"""
-	def __init__(self) -> None:
-		super().__init__('Pool is already closed')
+	def __init__(self, message: Optional[str] = None) -> None:
+		message = message if message is not None else 'Pool is closed'
+		super().__init__(message)
 
 
 class PoolClosingError(PoolError):
 	"""
 	"""
-	def __init__(self) -> None:
-		super().__init__('Pool is already closing')
+	def __init__(self, message: Optional[str] = None) -> None:
+		message = message if message is not None else 'Pool is closing'
+		super().__init__(message)
