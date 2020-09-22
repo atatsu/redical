@@ -5,6 +5,8 @@ import pytest
 
 from redical import create_pool, PoolClosedError, PoolClosingError
 
+pytestmark = [pytest.mark.asyncio]
+
 
 @pytest.fixture
 async def pool(redis_uri):
@@ -19,38 +21,32 @@ async def pool(redis_uri):
 		await pool.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_min_lower_than_max(redis_uri):
 	with pytest.raises(ValueError, match="'min_size' must be lower than 'max_size'"):
 		await create_pool(redis_uri, min_size=10, max_size=1)
 
 
-@pytest.mark.asyncio
 async def test_db_less_than_zero(redis_uri):
 	with pytest.raises(ValueError, match="'db' must be a non-negative number"):
 		await create_pool(redis_uri, db=-1)
 
 
-@pytest.mark.asyncio
 async def test_max_chunk_size_less_than_zero(redis_uri):
 	with pytest.raises(ValueError, match="'max_chunk_size' must be a number greater than zero"):
 		await create_pool(redis_uri, max_chunk_size=-1)
 
 
-@pytest.mark.asyncio
 async def test_min_pool_filled(pool):
 	assert 2 == pool.available
 	assert 2 == pool.size
 
 
-@pytest.mark.asyncio
 async def test_pool_double_close(pool):
 	pool.close()
 	with pytest.raises(PoolClosingError, match='Pool is already closing'):
 		pool.close()
 
 
-@pytest.mark.asyncio
 async def test_pool_already_closed(pool):
 	pool.close()
 	await pool.wait_closed()
@@ -58,13 +54,11 @@ async def test_pool_already_closed(pool):
 		pool.close()
 
 
-@pytest.mark.asyncio
 async def test_wait_not_closed(pool):
 	with pytest.raises(RuntimeError, match='Pool is not closing'):
 		await pool.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_double_wait_closed(pool):
 	pool.close()
 	await pool.wait_closed()
@@ -75,7 +69,6 @@ async def test_double_wait_closed(pool):
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Internal connection state
 
-@pytest.mark.asyncio
 async def test_acquiring_connection_rotates_pool(pool):
 	# make it look like the first connection in the pool is being used
 	# so that we *should* pick the second one to execute our command
@@ -96,7 +89,6 @@ async def test_acquiring_connection_rotates_pool(pool):
 	conn.execute.assert_not_called()
 
 
-@pytest.mark.asyncio
 async def test_release_drop_closed_connection(pool):
 	conn = await pool._acquire_unused_connection(remove_from_pool=True)
 	assert 1 == pool.size
@@ -107,7 +99,6 @@ async def test_release_drop_closed_connection(pool):
 	assert conn not in pool._pool
 
 
-@pytest.mark.asyncio
 async def test_release_drop_closing_connection(pool):
 	conn = await pool._acquire_unused_connection(remove_from_pool=True)
 	assert 1 == pool.size
@@ -118,7 +109,6 @@ async def test_release_drop_closing_connection(pool):
 	assert conn not in pool._pool
 
 
-@pytest.mark.asyncio
 async def test_acquire_create_new(pool):
 	conn = await pool._acquire_unused_connection(remove_from_pool=True)
 	pool._in_use.add(conn)
@@ -129,7 +119,6 @@ async def test_acquire_create_new(pool):
 	assert 1 == pool.available
 
 
-@pytest.mark.asyncio
 async def test_acquire_waits_if_no_available_connection(pool):
 	conns = []
 	for x in range(4):
@@ -153,7 +142,6 @@ async def test_acquire_waits_if_no_available_connection(pool):
 	await asyncio.wait_for(asyncio.gather(release(event), acquire(event)), timeout=1)
 
 
-@pytest.mark.asyncio
 async def test_acquire_prune_stale_connections(pool):
 	assert 2 == pool.available
 	for conn in pool._pool:
@@ -167,13 +155,11 @@ async def test_acquire_prune_stale_connections(pool):
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Execute
 
-@pytest.mark.asyncio
 async def test_execute_basic(pool):
 	await pool.execute('set', 'foo', 'bar')
 	assert 'bar' == await pool.execute('get', 'foo')
 
 
-@pytest.mark.asyncio
 async def test_execute_no_free_connections(pool):
 	conns = []
 	for x in range(4):
@@ -195,7 +181,6 @@ async def test_execute_no_free_connections(pool):
 	await asyncio.wait_for(asyncio.gather(release(event), execute(event)), timeout=1)
 
 
-@pytest.mark.asyncio
 async def test_execute_pool_closed(pool):
 	pool.close()
 	await pool.wait_closed()
@@ -203,7 +188,6 @@ async def test_execute_pool_closed(pool):
 		await pool.execute('get', 'foo')
 
 
-@pytest.mark.asyncio
 async def test_execute_pool_closing(pool):
 	pool.close()
 	with pytest.raises(PoolClosingError, match='Pool is closing'):
@@ -213,7 +197,6 @@ async def test_execute_pool_closing(pool):
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Pipelines
 
-@pytest.mark.asyncio
 async def test_pipeline(pool):
 	async with pool as conn:
 		fut1 = conn.execute('set', 'foo', 'bar')
@@ -227,14 +210,12 @@ async def test_pipeline(pool):
 	assert 'baz' == await fut4
 
 
-@pytest.mark.asyncio
 async def test_pipelines_sequester_connection(pool):
 	async with pool:
 		assert 2 == pool.size
 		assert 1 == pool.available
 
 
-@pytest.mark.asyncio
 async def test_context_sanity_check(pool):
 	async def t1(event):
 		async with pool as conn:
@@ -256,7 +237,6 @@ async def test_context_sanity_check(pool):
 	await asyncio.gather(t1(event), t2(event))
 
 
-@pytest.mark.asyncio
 async def test_pipeline_releases_connection(pool):
 	async with pool:
 		assert 2 == pool.size
@@ -265,7 +245,6 @@ async def test_pipeline_releases_connection(pool):
 	assert 2 == pool.available
 
 
-@pytest.mark.asyncio
 async def test_pipeline_pool_closed(pool):
 	pool.close()
 	await pool.wait_closed()
@@ -274,7 +253,6 @@ async def test_pipeline_pool_closed(pool):
 			pass
 
 
-@pytest.mark.asyncio
 async def test_pipeline_pool_closing(pool):
 	pool.close()
 	with pytest.raises(PoolClosingError, match='Pool is closing'):

@@ -14,11 +14,11 @@ from redical import (
 	ConnectionClosingError,
 	PipelineError,
 )
-from redical.connection import _build_command
+
+pytestmark = [pytest.mark.asyncio]
 
 
 # TODO: SSL
-# TODO: Test command execute while in disconnected state
 
 @dataclass
 class Server:
@@ -82,7 +82,6 @@ async def conn(redis_uri):
 		await conn.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_create_connection_uri(redis_uri):
 	conn = await create_connection(redis_uri)
 	assert isinstance(conn, Connection)
@@ -95,7 +94,6 @@ async def test_create_connection_uri(redis_uri):
 	assert conn.is_closed
 
 
-@pytest.mark.asyncio
 async def test_create_connection_address(redis_uri):
 	url = URL(redis_uri)
 	conn = await create_connection((url.host, url.port))
@@ -109,7 +107,6 @@ async def test_create_connection_address(redis_uri):
 	assert conn.is_closed
 
 
-@pytest.mark.asyncio
 async def test_create_connection_wait_no_close(redis_uri):
 	conn = await create_connection(redis_uri)
 	try:
@@ -123,7 +120,6 @@ async def test_create_connection_wait_no_close(redis_uri):
 		await conn.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_create_connection_remote_closed(disconnecting_server):
 	async with disconnecting_server.server:
 		conn = await create_connection(disconnecting_server.address)
@@ -131,7 +127,6 @@ async def test_create_connection_remote_closed(disconnecting_server):
 	assert conn.is_closed
 
 
-@pytest.mark.asyncio
 async def test_create_connection_unix_socket(unix_server):
 	async with unix_server.server:
 		conn = await create_connection(unix_server.path)
@@ -143,15 +138,6 @@ async def test_create_connection_unix_socket(unix_server):
 			pytest.fail('connection failed to close gracefully')
 
 
-@pytest.mark.parametrize('command, args, expected', [
-	('set', ('mykey', 'foo'), b'*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$3\r\nfoo\r\n')
-])
-def test_build_command(command, args, expected):
-	cmd = _build_command(command, *args)
-	assert expected == bytes(cmd)
-
-
-@pytest.mark.asyncio
 async def test_execute_resolve_immediately(conn):
 	result = await conn.execute('set', 'mykey', 'foo')
 	assert True is result
@@ -161,14 +147,12 @@ async def test_execute_resolve_immediately(conn):
 	assert 'foo' == result
 
 
-@pytest.mark.asyncio
 async def test_conn_double_close(conn):
 	conn.close()
 	with pytest.raises(ConnectionClosingError, match='Connection is already closing'):
 		conn.close()
 
 
-@pytest.mark.asyncio
 async def test_conn_already_closed(conn):
 	conn.close()
 	await conn.wait_closed()
@@ -176,13 +160,11 @@ async def test_conn_already_closed(conn):
 		conn.close()
 
 
-@pytest.mark.asyncio
 async def test_wait_not_closed(conn):
 	with pytest.raises(RuntimeError, match='Connection is not closing'):
 		await conn.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_double_wait_closed(conn):
 	conn.close()
 	await conn.wait_closed()
@@ -190,7 +172,6 @@ async def test_double_wait_closed(conn):
 		await conn.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_execute_closed(conn):
 	conn.close()
 	await conn.wait_closed()
@@ -198,7 +179,6 @@ async def test_execute_closed(conn):
 		await conn.execute('ping')
 
 
-@pytest.mark.asyncio
 async def test_execute_closing(conn):
 	conn.close()
 	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
@@ -208,7 +188,6 @@ async def test_execute_closing(conn):
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Encoding-specific tests
 
-@pytest.mark.asyncio
 async def test_execute_encoding(conn):
 	"""
 	Custom encoding passed via the `execute` method.
@@ -226,7 +205,6 @@ async def test_execute_encoding(conn):
 	assert '훈민정음' == result
 
 
-@pytest.mark.asyncio
 async def test_execute_encoding_conn(redis_uri):
 	"""
 	Custom encoding passed via connection creation.
@@ -241,7 +219,6 @@ async def test_execute_encoding_conn(redis_uri):
 	await conn.wait_closed()
 
 
-@pytest.mark.asyncio
 async def test_execute_encoding_conn_override(redis_uri):
 	"""
 	Custom encoding passed via `execute` method overriding instance setting.
@@ -257,7 +234,6 @@ async def test_execute_encoding_conn_override(redis_uri):
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Pipelines
 
-@pytest.mark.asyncio
 async def test_pipeline(conn):
 	async with conn:
 		fut1 = conn.execute('set', 'a', 'foo')
@@ -275,13 +251,11 @@ async def test_pipeline(conn):
 	assert 'foo' == await fut4
 
 
-@pytest.mark.asyncio
 async def test_pipeline_conn_in_use(conn):
 	async with conn:
 		assert conn.in_use
 
 
-@pytest.mark.asyncio
 async def test_pipeline_improper_await(conn):
 	async with conn:
 		fut1 = conn.execute('set', 'a', 'foo')
@@ -297,7 +271,6 @@ async def test_pipeline_improper_await(conn):
 	assert True is await fut2
 
 
-@pytest.mark.asyncio
 async def test_pipeline_already_in_pipeline(conn):
 	async with conn:
 		with pytest.raises(PipelineError, match='Already in pipeline mode'):
@@ -305,7 +278,6 @@ async def test_pipeline_already_in_pipeline(conn):
 				pass
 
 
-@pytest.mark.asyncio
 async def test_pipeline_closed(conn):
 	conn.close()
 	await conn.wait_closed()
@@ -314,7 +286,6 @@ async def test_pipeline_closed(conn):
 			pass
 
 
-@pytest.mark.asyncio
 async def test_pipeline_closing(conn):
 	conn.close()
 	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
@@ -322,7 +293,6 @@ async def test_pipeline_closing(conn):
 			pass
 
 
-@pytest.mark.asyncio
 async def test_pipeline_no_commands(conn):
 	with mock.patch.object(conn, '_writer') as _writer:
 		_writer.drain = mock.AsyncMock()

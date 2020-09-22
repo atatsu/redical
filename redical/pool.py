@@ -145,6 +145,10 @@ class ConnectionPool(RedicalResource):
 		"""
 		return self.available + len(self._in_use) + self._acquiring
 
+	@property
+	def supports_multiple_pipelines(self) -> bool:
+		return True
+
 	def __init__(
 		self,
 		*,

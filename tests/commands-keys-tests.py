@@ -2,39 +2,35 @@ import pytest
 
 from redical import InvalidKeyError, NoExpiryError
 
+pytestmark = [pytest.mark.asyncio]
 
-@pytest.mark.asyncio
+
 async def test_exists_no_key(redical):
 	assert 0 == await redical.exists('mykey')
 
 
-@pytest.mark.asyncio
 async def test_exists_one_key(redical):
 	await redical.execute('set', 'mykey', 'foo')
 	assert 1 == await redical.exists('mykey')
 
 
-@pytest.mark.asyncio
 async def test_exists_multiple(redical):
 	await redical.execute('set', 'mykey1', 'foo')
 	await redical.execute('set', 'mykey2', 'foo')
 	assert 2 == await redical.exists('mykey1', 'mykey2', 'mykey3')
 
 
-@pytest.mark.asyncio
 async def test_pttl_no_key(redical):
 	with pytest.raises(InvalidKeyError, match="Key with name 'mykey' does not exist"):
 		await redical.pttl('mykey')
 
 
-@pytest.mark.asyncio
 async def test_pttl_no_expire(redical):
 	assert True is await redical.set('mykey', 'foo')
 	with pytest.raises(NoExpiryError, match="Key with name 'mykey' has no expiry set"):
 		await redical.pttl('mykey')
 
 
-@pytest.mark.asyncio
 async def test_pttl_expire(redical):
 	assert True is await redical.set('mykey', 'foo')
 	await redical.execute('PEXPIRE', 'mykey', 10000)
@@ -42,20 +38,17 @@ async def test_pttl_expire(redical):
 	assert 9990 < await redical.pttl('mykey') <= 10000
 
 
-@pytest.mark.asyncio
 async def test_ttl_no_key(redical):
 	with pytest.raises(InvalidKeyError, match="Key with name 'mykey' does not exist"):
 		await redical.ttl('mykey')
 
 
-@pytest.mark.asyncio
 async def test_ttl_no_expire(redical):
 	assert True is await redical.set('mykey', 'foo')
 	with pytest.raises(NoExpiryError, match="Key with name 'mykey' has no expiry set"):
 		await redical.ttl('mykey')
 
 
-@pytest.mark.asyncio
 async def test_ttl_expire(redical):
 	await redical.set('mykey', 'foo')
 	await redical.execute('EXPIRE', 'mykey', 10)

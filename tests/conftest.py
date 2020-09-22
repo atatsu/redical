@@ -52,7 +52,7 @@ async def redical(request, redis_uri, conn):
 		_redical = await create_redical(redis_uri)
 	else:
 		LOG.info('Creating pool-based Redical')
-		_redical = await create_redical_pool(redis_uri)
+		_redical = await create_redical_pool(redis_uri, max_size=4, min_size=2)
 	yield _redical
 	# this might look goofy but it allows tests to do silly things like attempt operations
 	# while the connections are in a partially closed state and still have them cleaned
@@ -63,29 +63,3 @@ async def redical(request, redis_uri, conn):
 	if not _redical.is_closed:
 		_redical.close()
 		await _redical.wait_closed()
-
-
-@pytest.fixture
-async def redical_conn(redis_uri):
-	_redical = await create_redical(redis_uri)
-	await _redical.flushdb()
-	yield _redical
-	if not _redical.is_closed and _redical.is_closing:
-		await _redical.wait_closed()
-		return
-	if not _redical.is_closed:
-		_redical.close()
-		await _redical.wait_closed()
-
-
-@pytest.fixture
-async def redical_pool(redis_uri):
-	pool = await create_redical_pool(redis_uri)
-	await pool.flushdb()
-	yield pool
-	if not pool.is_closed and pool.is_closing:
-		await pool.wait_closed()
-		return
-	if not pool.is_closed:
-		pool.close()
-		await pool.wait_closed()

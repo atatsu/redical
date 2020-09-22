@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 from types import TracebackType
-from typing import Any, AnyStr, Awaitable, Final, Optional, Tuple, Type, Union
+from typing import cast, Any, AnyStr, Awaitable, Final, List, Optional, Tuple, Type, Union
 
-from .abstract import AbstractParser, RedicalResource
+from .abstract import AbstractParser, Execute, RedicalResource
 from .command import (
 	KeyCommandsMixin,
 	ServerCommandsMixin,
@@ -13,6 +13,8 @@ from .command import (
 )
 from .connection import create_connection, Connection
 from .pool import create_pool, ConnectionPool
+
+__all__: List[str] = ['Redical', 'RedicalPipeline']
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -37,6 +39,8 @@ async def create_redical_pool(
 	db: int = 0,
 	encoding: str = 'utf-8',
 	max_chunk_size: int = 65535,
+	max_size: int = 10,
+	min_size: int = 1,
 	parser: Optional[AbstractParser] = None
 ) -> Redical:
 	pool: ConnectionPool = await create_pool(
@@ -45,12 +49,31 @@ async def create_redical_pool(
 	return Redical(pool)
 
 
+class RedicalPipeline(
+	Execute,
+	KeyCommandsMixin,
+	ServerCommandsMixin,
+	SetCommandsMixin,
+	StringCommandsMixin,
+):
+	"""
+	"""
+	_connection: RedicalResource
+
+	def __init__(self, connection: Connection) -> None:
+		self._connection = connection
+
+	def execute(self, command: AnyStr, *args: Any, **kwargs: Any) -> Awaitable[Any]:
+		return self._connection.execute(command, *args, **kwargs)
+
+
 class Redical(
 	KeyCommandsMixin,
 	ServerCommandsMixin,
 	SetCommandsMixin,
 	StringCommandsMixin,
 ):
+	__slots__: List[str] = ['_resource']
 	_resource: RedicalResource
 
 	@property
@@ -60,6 +83,10 @@ class Redical(
 	@property
 	def is_closing(self) -> bool:
 		return self._resource.is_closing
+
+	@property
+	def resource(self) -> RedicalResource:
+		return self._resource
 
 	def __init__(self, resource: RedicalResource) -> None:
 		self._resource = resource
@@ -73,8 +100,9 @@ class Redical(
 	async def wait_closed(self) -> None:
 		await self._resource.wait_closed()
 
-	async def __aenter__(self) -> None:
-		await self._resource.__aenter__()
+	async def __aenter__(self) -> RedicalPipeline:
+		conn: Connection = cast(Connection, await self._resource.__aenter__())
+		return RedicalPipeline(conn)
 
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]

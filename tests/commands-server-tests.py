@@ -1,7 +1,8 @@
 import pytest  # type: ignore
 
+pytestmark = [pytest.mark.asyncio]
 
-@pytest.mark.asyncio
+
 async def test_flushdb(redical):
 	await redical.execute('set', 'mykey', 'foo')
 	assert 1 == await redical.execute('exists', 'mykey')

@@ -7,7 +7,22 @@ from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple, Type
 __all__: List[str] = ['AbstractParser', 'RedicalResource']
 
 
-class RedicalResource(ABC):
+class Execute(ABC):
+	@abstractmethod
+	def execute(
+		self,
+		command: AnyStr,
+		*args: Any,
+		conversion_func: Optional[Callable[[Any], Any]] = None,
+		encoding: str = 'utf-8',
+		**kwargs: Any
+	) -> Awaitable[Any]:
+		"""
+		Execute a Redis command through the underlying connection or pool.
+		"""
+
+
+class RedicalResource(Execute):
 	@property
 	@abstractmethod
 	def address(self) -> Tuple[str, int]:
@@ -44,23 +59,19 @@ class RedicalResource(ABC):
 		Whether or not the underlying connection or pool is in a closing state.
 		"""
 
+	@property
+	@abstractmethod
+	def supports_multiple_pipelines(self) -> bool:
+		"""
+		Whether or not this resource supports multiple simultaneous pipelines.
+		If the underlying resource is a `Connection`, it will not.
+		If the underlying resource is a `ConnectionPool`, it will.
+		"""
+
 	@abstractmethod
 	def close(self) -> None:
 		"""
 		Closes the underlying connection or pool.
-		"""
-
-	@abstractmethod
-	def execute(
-		self,
-		command: AnyStr,
-		*args: Any,
-		conversion_func: Optional[Callable[[Any], Any]] = None,
-		encoding: str = 'utf-8',
-		**kwargs: Any
-	) -> Awaitable[Any]:
-		"""
-		Execute a Redis command through the underlying connection or pool.
 		"""
 
 	@abstractmethod

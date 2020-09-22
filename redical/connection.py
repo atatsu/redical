@@ -254,6 +254,10 @@ class Connection(RedicalResource):
 	def is_closing(self) -> bool:
 		return self._closing
 
+	@property
+	def supports_multiple_pipelines(self) -> bool:
+		return False
+
 	def __init__(
 		self,
 		reader: 'StreamReader',

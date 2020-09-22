@@ -1,13 +1,13 @@
 import pytest  # type: ignore
 
+pytestmark = [pytest.mark.asyncio]
 
-@pytest.mark.asyncio
+
 async def test_set_smembers(redical):
 	await redical.execute('SADD', 'mykey', 'one', 'two', 'three')
 	assert {'one', 'two', 'three'} == await redical.smembers('mykey')
 
 
-@pytest.mark.asyncio
 async def test_set_srem(redical):
 	await redical.execute('SADD', 'mykey', 'one', 'two', 'three')
 	assert 2 == await redical.srem('mykey', 'two', 'one', 'four')
