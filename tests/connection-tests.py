@@ -9,7 +9,6 @@ from yarl import URL
 
 from redical import (
 	create_connection,
-	create_redical,
 	Connection,
 	ConnectionClosedError,
 	ConnectionClosingError,
@@ -73,6 +72,7 @@ async def disconnecting_server(unused_port):
 @pytest.fixture
 async def conn(redis_uri):
 	conn = await create_connection(redis_uri)
+	await conn.execute('flushdb')
 	yield conn
 	if not conn.is_closed and conn.is_closing:
 		await conn.wait_closed()
@@ -231,14 +231,14 @@ async def test_execute_encoding_conn(redis_uri):
 	"""
 	Custom encoding passed via connection creation.
 	"""
-	redical = await create_redical(redis_uri, encoding='iso2022_kr')
-	await redical.flushdb()
+	conn = await create_connection(redis_uri, encoding='iso2022_kr')
+	await conn.execute('flushdb')
 	korean = '훈민정음'
 	encoded = korean.encode('iso2022_kr')
-	await redical.set('mykey', encoded)
-	assert '훈민정음' == await redical.get('mykey')
-	redical.close()
-	await redical.wait_closed()
+	await conn.execute('set', 'mykey', encoded)
+	assert '훈민정음' == await conn.execute('get', 'mykey')
+	conn.close()
+	await conn.wait_closed()
 
 
 @pytest.mark.asyncio
@@ -246,28 +246,28 @@ async def test_execute_encoding_conn_override(redis_uri):
 	"""
 	Custom encoding passed via `execute` method overriding instance setting.
 	"""
-	redical = await create_redical(redis_uri, encoding='iso2022_kr')
-	await redical.flushdb()
-	await redical.set('mykey', '훈민정음')
-	assert '훈민정음' == await redical.get('mykey', encoding=None)
-	redical.close()
-	await redical.wait_closed()
+	conn = await create_connection(redis_uri, encoding='iso2022_kr')
+	await conn.execute('flushdb')
+	await conn.execute('set', 'mykey', '훈민정음')
+	assert '훈민정음' == await conn.execute('get', 'mykey', encoding=None)
+	conn.close()
+	await conn.wait_closed()
 
 
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Pipelines
 
 @pytest.mark.asyncio
-async def test_pipeline(redical):
-	async with redical:
-		fut1 = redical.set('a', 'foo')
-		fut2 = redical.set('b', 'bar')
-		fut3 = redical.set('c', 'baz')
-		fut4 = redical.get('a')
+async def test_pipeline(conn):
+	async with conn:
+		fut1 = conn.execute('set', 'a', 'foo')
+		fut2 = conn.execute('set', 'b', 'bar')
+		fut3 = conn.execute('set', 'c', 'baz')
+		fut4 = conn.execute('get', 'a')
 
-	assert 'foo' == await redical.get('a')
-	assert 'bar' == await redical.get('b')
-	assert 'baz' == await redical.get('c')
+	assert 'foo' == await conn.execute('get', 'a')
+	assert 'bar' == await conn.execute('get', 'b')
+	assert 'baz' == await conn.execute('get', 'c')
 
 	assert True is await fut1
 	assert True is await fut2
@@ -282,43 +282,43 @@ async def test_pipeline_conn_in_use(conn):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_improper_await(redical):
-	async with redical:
-		fut1 = redical.set('a', 'foo')
+async def test_pipeline_improper_await(conn):
+	async with conn:
+		fut1 = conn.execute('set', 'a', 'foo')
 		with pytest.raises(PipelineError, match='Do not await connection method calls inside a pipeline block!'):
-			await redical.set('b', 'bar')
-		fut2 = redical.set('c', 'baz')
+			await conn.execute('set', 'b', 'bar')
+		fut2 = conn.execute('set', 'c', 'baz')
 
-	assert 'foo' == await redical.get('a')
-	assert 'bar' == await redical.get('b')
-	assert 'baz' == await redical.get('c')
+	assert 'foo' == await conn.execute('get', 'a')
+	assert 'bar' == await conn.execute('get', 'b')
+	assert 'baz' == await conn.execute('get', 'c')
 
 	assert True is await fut1
 	assert True is await fut2
 
 
 @pytest.mark.asyncio
-async def test_pipeline_already_in_pipeline(redical):
-	async with redical:
+async def test_pipeline_already_in_pipeline(conn):
+	async with conn:
 		with pytest.raises(PipelineError, match='Already in pipeline mode'):
-			async with redical:
+			async with conn:
 				pass
 
 
 @pytest.mark.asyncio
-async def test_pipeline_closed(redical):
-	redical.close()
-	await redical.wait_closed()
+async def test_pipeline_closed(conn):
+	conn.close()
+	await conn.wait_closed()
 	with pytest.raises(ConnectionClosedError, match='Connection is closed'):
-		async with redical:
+		async with conn:
 			pass
 
 
 @pytest.mark.asyncio
-async def test_pipeline_closing(redical):
-	redical.close()
+async def test_pipeline_closing(conn):
+	conn.close()
 	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
-		async with redical:
+		async with conn:
 			pass
 
 

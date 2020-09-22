@@ -1,3 +1,4 @@
+import logging
 import os
 import socket
 
@@ -5,17 +6,13 @@ import pytest  # type: ignore
 
 from redical import create_connection, create_redical, create_redical_pool
 
+LOG = logging.getLogger('tests')
+
 
 @pytest.fixture
 def redis_uri():
 	redis_uri = os.environ['REDICAL_REDIS_URI']
 	return redis_uri
-
-
-@pytest.fixture
-async def conn():
-	conn = await create_connection(redis_uri)
-	return conn
 
 
 @pytest.fixture(scope='session')
@@ -39,7 +36,37 @@ def unix_socket():
 
 
 @pytest.fixture
-async def redical(redis_uri):
+async def conn(redis_uri):
+	conn = await create_connection(redis_uri)
+	yield conn
+	conn.close()
+	await conn.wait_closed()
+
+
+@pytest.fixture(params=['connection', 'pool'])
+async def redical(request, redis_uri, conn):
+	await conn.execute('flushdb')
+	_redical = None
+	if request.param == 'connection':
+		LOG.info('Creating standalone Redical')
+		_redical = await create_redical(redis_uri)
+	else:
+		LOG.info('Creating pool-based Redical')
+		_redical = await create_redical_pool(redis_uri)
+	yield _redical
+	# this might look goofy but it allows tests to do silly things like attempt operations
+	# while the connections are in a partially closed state and still have them cleaned
+	# up properly
+	if not _redical.is_closed and _redical.is_closing:
+		await _redical.wait_closed()
+		return
+	if not _redical.is_closed:
+		_redical.close()
+		await _redical.wait_closed()
+
+
+@pytest.fixture
+async def redical_conn(redis_uri):
 	_redical = await create_redical(redis_uri)
 	await _redical.flushdb()
 	yield _redical
