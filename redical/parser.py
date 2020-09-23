@@ -1,11 +1,7 @@
 from typing import Any
 
-try:
-	from hiredis import Reader as HiredisParser  # type: ignore
-except ImportError:
-	HiredisParser = object
-
 from .abstract import AbstractParser
+from .exception import ResponseError
 
 
 # TODO: Pure-python parser
@@ -13,7 +9,17 @@ class PyParser:
 	pass
 
 
-class Parser(HiredisParser, PyParser, AbstractParser):
+try:
+	from hiredis import Reader as ParserBase  # type: ignore
+except ImportError:
+	ParserBase = PyParser
+
+
+class Parser(ParserBase, AbstractParser):
+	def __init__(self) -> None:
+		if not issubclass(ParserBase, PyParser):
+			super().__init__(replyError=ResponseError)
+
 	def gets(self) -> Any:
 		parsed: Any = super().gets()
 		if parsed is False:

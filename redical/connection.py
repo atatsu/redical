@@ -27,7 +27,7 @@ from urllib.parse import unquote
 from yarl import URL
 
 from .abstract import AbstractParser, RedicalResource
-from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError
+from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError, ResponseError
 from .parser import Parser
 
 ConversionFunc = Callable[[Any], Any]
@@ -144,10 +144,12 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 		if isinstance(arg, bytes):
 			_arg = arg
 		elif isinstance(arg, str):
-			# FIXME: encoding
+			# FIXME?: encoding
 			_arg = arg.encode()
 		elif isinstance(arg, int):
 			_arg = b'%d' % arg
+		elif isinstance(arg, float):
+			_arg = b'%a' % arg
 		else:
 			raise NotImplementedError(f'Unable to encode type {type(arg)}')
 		cmd.extend(b'$%d\r\n' % len(_arg))
@@ -166,6 +168,7 @@ def _decode(parsed: Any, encoding: str, conversion_func: Optional[ConversionFunc
 		decoded_members: List[Any] = [_decode(x, encoding) for x in parsed]
 		if callable(conversion_func):
 			return conversion_func(decoded_members)
+		return decoded_members
 
 	if callable(conversion_func):
 		return conversion_func(parsed)
@@ -352,7 +355,12 @@ class Connection(RedicalResource):
 					# TODO: what if there is no future to pop?
 					resolver: Resolver = self._resolvers.popleft()
 					try:
-						resolver.future.set_result(_decode(parsed, resolver.encoding, resolver.conversion_func))
+						if isinstance(parsed, ResponseError):
+							resolver.future.set_exception(parsed)
+							continue
+						decoded: Any = _decode(parsed, resolver.encoding, resolver.conversion_func)
+						LOG.debug(f'decoded response: {decoded}')
+						resolver.future.set_result(decoded)
 					except Exception as ex:
 						resolver.future.set_exception(ex)
 			except asyncio.IncompleteReadError:
@@ -397,7 +405,7 @@ class Connection(RedicalResource):
 		for resolver in resolvers:
 			cast(PipelineFutureWrapper, resolver.future).clear_in_progress()
 		self._pipeline_buffer = bytearray()
-		await asyncio.gather(*[resolver.future for resolver in resolvers])
+		await asyncio.gather(*[resolver.future for resolver in resolvers], return_exceptions=True)
 		return None
 
 	def __repr__(self) -> str:

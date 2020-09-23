@@ -13,6 +13,7 @@ from redical import (
 	ConnectionClosedError,
 	ConnectionClosingError,
 	PipelineError,
+	ResponseError,
 )
 
 pytestmark = [pytest.mark.asyncio]
@@ -186,6 +187,26 @@ async def test_execute_closing(conn):
 
 
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Error responses
+
+async def test_response_error(conn):
+	with pytest.raises(ResponseError, match="wrong number of arguments for 'hset' command"):
+		await conn.execute('hset', 'mykey')
+
+
+async def test_response_error_pipeline(conn):
+	async with conn:
+		fut1 = conn.execute('set', 'foo', 'bar')
+		fut2 = conn.execute('hset', 'mykey')
+		fut3 = conn.execute('get', 'foo')
+
+	assert True is await fut1
+	assert 'bar' == await fut3
+	with pytest.raises(ResponseError, match="wrong number of arguments for 'hset' command"):
+		await fut2
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Encoding-specific tests
 
 async def test_execute_encoding(conn):
@@ -229,6 +250,14 @@ async def test_execute_encoding_conn_override(redis_uri):
 	assert '훈민정음' == await conn.execute('get', 'mykey', encoding=None)
 	conn.close()
 	await conn.wait_closed()
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Decoding-specific tests
+
+async def test_list_results_no_conversion(conn):
+	await conn.execute('sadd', 'mykey', 'one', 'two', 'three', 'four', 'five', 'six')
+	assert set(['one', 'two', 'three', 'four', 'five', 'six']) == set(await conn.execute('smembers', 'mykey'))
 
 
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|

@@ -11,11 +11,18 @@ __all__: List[str] = [
 	'PoolError',
 	'PoolClosingError',
 	'PoolClosedError',
+	'ResponseError',
 ]
 
 
 class RedicalError(Exception):
 	"""
+	"""
+
+
+class ResponseError(RedicalError):
+	"""
+	Raised when *redis* replies with an error (`-ERR`) response.
 	"""
 
 
