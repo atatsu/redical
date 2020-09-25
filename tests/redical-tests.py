@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from redical import create_redical, PipelineError
+
 pytestmark = [pytest.mark.asyncio]
 
 # There will probably be a lot of duplicated tests here (specifically
@@ -21,6 +23,16 @@ async def test_pipeline(redical):
 	assert True is await fut2
 	assert 'bar' == await fut3
 	assert 'baz' == await fut4
+
+
+async def test_multiple_pipelines_prevented(redis_uri):
+	redical = await create_redical(redis_uri)
+	async with redical:
+		with pytest.raises(PipelineError):
+			async with redical:
+				pass
+	redical.close()
+	await redical.wait_closed()
 
 
 async def test_context_sanity_check(redical):
@@ -46,3 +58,15 @@ async def test_context_sanity_check(redical):
 
 	event = asyncio.Event()
 	await asyncio.gather(t1(event), t2(event))
+
+
+async def test_pipeline_disallow_close(redical):
+	async with redical as pipe:
+		with pytest.raises(PipelineError, match='Do not close from within pipeline'):
+			pipe.close()
+
+
+async def test_pipeline_disallow_close_wait(redical):
+	async with redical as pipe:
+		with pytest.raises(PipelineError, match='Do not close from within pipeline'):
+			await pipe.wait_closed()

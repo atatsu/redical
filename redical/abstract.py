@@ -7,22 +7,7 @@ from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple, Type
 __all__: List[str] = ['AbstractParser', 'RedicalResource']
 
 
-class Execute(ABC):
-	@abstractmethod
-	def execute(
-		self,
-		command: AnyStr,
-		*args: Any,
-		conversion_func: Optional[Callable[[Any], Any]] = None,
-		encoding: str = 'utf-8',
-		**kwargs: Any
-	) -> Awaitable[Any]:
-		"""
-		Execute a Redis command through the underlying connection or pool.
-		"""
-
-
-class RedicalResource(Execute):
+class RedicalResource(ABC):
 	@property
 	@abstractmethod
 	def address(self) -> Tuple[str, int]:
@@ -72,6 +57,19 @@ class RedicalResource(Execute):
 	def close(self) -> None:
 		"""
 		Closes the underlying connection or pool.
+		"""
+
+	@abstractmethod
+	def execute(
+		self,
+		command: AnyStr,
+		*args: Any,
+		conversion_func: Optional[Callable[[Any], Any]] = None,
+		encoding: str = 'utf-8',
+		**kwargs: Any
+	) -> Awaitable[Any]:
+		"""
+		Execute a Redis command through the underlying connection or pool.
 		"""
 
 	@abstractmethod

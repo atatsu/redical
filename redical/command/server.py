@@ -1,14 +1,14 @@
 from typing import Any, Awaitable
 
-from .base import BaseMixin
+from ..mixin import Executable
 
 
-class ServerCommandsMixin(BaseMixin):
+class ServerCommandsMixin:
 	"""
 	Implemented commands:
 		* flushdb
 	"""
-	def flushdb(self, **kwargs: Any) -> Awaitable[bool]:
+	def flushdb(self: Executable, **kwargs: Any) -> Awaitable[bool]:
 		"""
 		Delete all the keys of the currently selected DB.
 		"""

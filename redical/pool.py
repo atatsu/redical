@@ -247,8 +247,8 @@ class ConnectionPool(RedicalResource):
 					continue
 
 				if remove_from_pool:
-					LOG.debug('sequestering connection from pool')
 					self._pool.remove(conn)
+					LOG.debug('sequestered connection from pool %s', self)
 				LOG.debug('retrieved connection from pool')
 				return conn
 

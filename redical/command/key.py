@@ -1,8 +1,8 @@
 from functools import partial
 from typing import Any, Awaitable
 
-from .base import BaseMixin
 from ..exception import InvalidKeyError, NoExpiryError
+from ..mixin import Executable
 
 
 def _ttl_error_wrapper(response: int, *, key: str) -> int:
@@ -16,7 +16,7 @@ def _ttl_error_wrapper(response: int, *, key: str) -> int:
 _pttl_error_wrapper = _ttl_error_wrapper
 
 
-class KeyCommandsMixin(BaseMixin):
+class KeyCommandsMixin:
 	"""
 	Implemented commands:
 		* exists
@@ -46,7 +46,7 @@ class KeyCommandsMixin(BaseMixin):
 		* wait
 		* scan
 	"""
-	def exists(self, *keys: str, **kwargs: Any) -> Awaitable[int]:
+	def exists(self: Executable, *keys: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Return a count for the number of supplied keys that exist.
 
@@ -62,7 +62,7 @@ class KeyCommandsMixin(BaseMixin):
 		"""
 		return self.execute('EXISTS', *keys, **kwargs)
 
-	def pttl(self, key: str, **kwargs: Any) -> Awaitable[int]:
+	def pttl(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in milliseconds.
 
@@ -78,7 +78,7 @@ class KeyCommandsMixin(BaseMixin):
 		"""
 		return self.execute('PTTL', key, conversion_func=partial(_pttl_error_wrapper, key=key), **kwargs)
 
-	def ttl(self, key: str, **kwargs: Any) -> Awaitable[int]:
+	def ttl(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in seconds.
 

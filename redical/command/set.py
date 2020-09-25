@@ -1,13 +1,13 @@
 from typing import Any, AnyStr, Awaitable, Set, Sequence
 
-from .base import BaseMixin
+from ..mixin import Executable
 
 
 def _smembers_convert_to_set(response: Sequence[Any]) -> Set[Any]:
 	return set(response)
 
 
-class SetCommandsMixin(BaseMixin):
+class SetCommandsMixin:
 	"""
 	Implemented commands:
 		* smembers
@@ -28,7 +28,7 @@ class SetCommandsMixin(BaseMixin):
 		* sunionstore
 		* sscan
 	"""
-	def smembers(self, key: str, **kwargs: Any) -> Awaitable[Set[Any]]:
+	def smembers(self: Executable, key: str, **kwargs: Any) -> Awaitable[Set[Any]]:
 		"""
 		Returns all the members of the set value stored at `key`.
 
@@ -40,7 +40,7 @@ class SetCommandsMixin(BaseMixin):
 		"""
 		return self.execute('SMEMBERS', key, conversion_func=_smembers_convert_to_set, **kwargs)
 
-	def srem(self, key: str, *members: AnyStr, **kwargs: Any) -> Awaitable[int]:
+	def srem(self: Executable, key: str, *members: AnyStr, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Remove the specified members from teh set stored at `key`.
 

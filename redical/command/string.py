@@ -1,8 +1,8 @@
 from functools import partial
 from typing import Any, AnyStr, Awaitable, List, Optional, Union
 
-from .base import BaseMixin
 from ..exception import InvalidKeyError
+from ..mixin import Executable
 
 
 def _set_convert_to_bool(response: Optional[str]) -> bool:
@@ -15,7 +15,7 @@ def _get_error_wrapper(response: Optional[Any], *, key: str) -> Any:
 	return response
 
 
-class StringCommandsMixin(BaseMixin):
+class StringCommandsMixin:
 	"""
 	Implemented commands:
 		* get
@@ -44,7 +44,7 @@ class StringCommandsMixin(BaseMixin):
 		* stralgo
 		* strlen
 	"""
-	def get(self, key: str, **kwargs: Any) -> Awaitable[str]:
+	def get(self: Executable, key: str, **kwargs: Any) -> Awaitable[str]:
 		"""
 		Retrieve the value of a key.
 
@@ -59,7 +59,7 @@ class StringCommandsMixin(BaseMixin):
 		"""
 		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key), **kwargs)
 
-	def incr(self, key: str, **kwargs: Any) -> Awaitable[int]:
+	def incr(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Increments the number stored at `key` by one.
 
@@ -72,7 +72,7 @@ class StringCommandsMixin(BaseMixin):
 		return self.execute('INCR', key, **kwargs)
 
 	def set(
-		self,
+		self: Executable,
 		key: str,
 		value: AnyStr,
 		*,
