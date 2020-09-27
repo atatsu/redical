@@ -70,3 +70,11 @@ async def test_pipeline_disallow_close_wait(redical):
 	async with redical as pipe:
 		with pytest.raises(PipelineError, match='Do not close from within pipeline'):
 			await pipe.wait_closed()
+
+
+async def test_error_func(redical):
+	def error_func(exc):
+		return TypeError('no!')
+
+	with pytest.raises(TypeError, match='no!'):
+		await redical.execute('hset', 'mykey', error_func=error_func)

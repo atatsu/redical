@@ -22,7 +22,7 @@ class RedicalError(Exception):
 
 class ResponseError(RedicalError):
 	"""
-	Raised when *redis* replies with an error (`-ERR`) response.
+	Raised when *redis* replies with an error (`-`) response.
 	"""
 
 

@@ -6,6 +6,9 @@ from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple, Type
 
 __all__: List[str] = ['AbstractParser', 'RedicalResource']
 
+ConversionFunc = Callable[[Any], Any]
+ErrorFunc = Callable[[Exception], Exception]
+
 
 class RedicalResource(ABC):
 	@property
@@ -64,9 +67,9 @@ class RedicalResource(ABC):
 		self,
 		command: AnyStr,
 		*args: Any,
-		conversion_func: Optional[Callable[[Any], Any]] = None,
+		conversion_func: Optional[ConversionFunc] = None,
 		encoding: str = 'utf-8',
-		**kwargs: Any
+		error_func: Optional[ErrorFunc] = None,
 	) -> Awaitable[Any]:
 		"""
 		Execute a Redis command through the underlying connection or pool.

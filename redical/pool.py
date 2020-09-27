@@ -9,7 +9,6 @@ from typing import (
 	Any,
 	AnyStr,
 	Awaitable,
-	Callable,
 	Deque,
 	Final,
 	List,
@@ -20,11 +19,9 @@ from typing import (
 	Union,
 )
 
-from .abstract import AbstractParser, RedicalResource
+from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
 from .connection import create_connection, undefined, Connection
 from .exception import PoolClosedError, PoolClosingError
-
-ConversionFunc = Callable[[Any], Any]
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -194,7 +191,7 @@ class ConnectionPool(RedicalResource):
 		*args: Any,
 		conversion_func: Optional[ConversionFunc] = None,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
-		**kwargs: Any
+		error_func: Optional[ErrorFunc] = None
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise PoolClosedError()
@@ -202,7 +199,9 @@ class ConnectionPool(RedicalResource):
 			raise PoolClosingError()
 
 		conn: Connection = await self._acquire_unused_connection()
-		return await conn.execute(command, *args, conversion_func=conversion_func, encoding=encoding)
+		return await conn.execute(
+			command, *args, conversion_func=conversion_func, encoding=encoding, error_func=error_func
+		)
 
 	async def wait_closed(self) -> None:
 		if not self._closing:

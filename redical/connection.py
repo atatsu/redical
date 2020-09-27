@@ -10,7 +10,6 @@ from typing import (
 	Any,
 	AnyStr,
 	Awaitable,
-	Callable,
 	Deque,
 	Final,
 	Generator,
@@ -26,11 +25,9 @@ from urllib.parse import unquote
 
 from yarl import URL
 
-from .abstract import AbstractParser, RedicalResource
+from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
 from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError, ResponseError
 from .parser import Parser
-
-ConversionFunc = Callable[[Any], Any]
 
 if TYPE_CHECKING:
 	from asyncio import Future, StreamReader, StreamWriter, Task
@@ -54,6 +51,7 @@ class Resolver:
 	encoding: str
 	future: 'Future'
 	conversion_func: Optional[ConversionFunc] = None
+	error_func: Optional[ErrorFunc] = None
 
 
 # TODO: SSL
@@ -305,7 +303,7 @@ class Connection(RedicalResource):
 		*args: Any,
 		conversion_func: Optional[ConversionFunc] = None,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
-		**kwargs: Any
+		error_func: Optional[ErrorFunc] = None,
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise ConnectionClosedError()
@@ -330,7 +328,7 @@ class Connection(RedicalResource):
 		if self._in_pipeline:
 			future = PipelineFutureWrapper(future)
 		self._resolvers.append(
-			Resolver(encoding=_encoding, future=future, conversion_func=conversion_func)
+			Resolver(encoding=_encoding, future=future, conversion_func=conversion_func, error_func=error_func)
 		)
 		return future
 
@@ -356,7 +354,10 @@ class Connection(RedicalResource):
 					resolver: Resolver = self._resolvers.popleft()
 					try:
 						if isinstance(parsed, ResponseError):
-							resolver.future.set_exception(parsed)
+							error: Exception = parsed
+							if resolver.error_func is not None:
+								error = resolver.error_func(error)
+							resolver.future.set_exception(error)
 							continue
 						decoded: Any = _decode(parsed, resolver.encoding, resolver.conversion_func)
 						LOG.debug(f'decoded response: {decoded}')

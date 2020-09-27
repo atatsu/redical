@@ -60,8 +60,6 @@ class Redical(
 	SetCommandsMixin,
 	StringCommandsMixin
 ):
-	_cls: Type[R]
-
 	@property
 	def is_closed(self) -> bool:
 		return self._resource.is_closed
@@ -69,10 +67,6 @@ class Redical(
 	@property
 	def is_closing(self) -> bool:
 		return self._resource.is_closing
-
-	def __init__(self, resource: RedicalResource, *, redical_cls: Type[R]) -> None:
-		super().__init__(resource)
-		self._cls = redical_cls
 
 	def close(self) -> None:
 		self._resource.close()
@@ -82,8 +76,8 @@ class Redical(
 
 	async def __aenter__(self) -> R:
 		conn: Connection = cast(Connection, await self._resource.__aenter__())
-		P: Type[R] = type('Pipeline', (Pipeline, self._cls), {})
-		return P(conn, redical_cls=self._cls)
+		P: Type[R] = type('Pipeline', (Pipeline, self.__class__), {})
+		return P(conn)
 
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
@@ -104,7 +98,7 @@ async def create_redical(
 		address_or_uri, db=db, encoding=encoding, max_chunk_size=max_chunk_size, parser=parser
 	)
 	cls: Type[R] = redical_cls if redical_cls is not None else Redical
-	return cls(conn, redical_cls=cls)
+	return cls(conn)
 
 
 async def create_redical_pool(
@@ -128,4 +122,4 @@ async def create_redical_pool(
 		parser=parser
 	)
 	cls: Type[R] = redical_cls if redical_cls is not None else Redical
-	return cls(pool, redical_cls=cls)
+	return cls(pool)

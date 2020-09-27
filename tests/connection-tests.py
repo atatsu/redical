@@ -190,7 +190,7 @@ async def test_execute_closing(conn):
 # Error responses
 
 async def test_response_error(conn):
-	with pytest.raises(ResponseError, match="wrong number of arguments for 'hset' command"):
+	with pytest.raises(ResponseError, match="ERR wrong number of arguments for 'hset' command"):
 		await conn.execute('hset', 'mykey')
 
 
@@ -202,8 +202,16 @@ async def test_response_error_pipeline(conn):
 
 	assert True is await fut1
 	assert 'bar' == await fut3
-	with pytest.raises(ResponseError, match="wrong number of arguments for 'hset' command"):
+	with pytest.raises(ResponseError, match="ERR wrong number of arguments for 'hset' command"):
 		await fut2
+
+
+async def test_custom_error_response(conn):
+	def custom_error(exc):
+		return ValueError(str(exc).replace('ERR ', ''))
+
+	with pytest.raises(ValueError, match="wrong number of arguments for 'hset' command"):
+		await conn.execute('hset', 'mykey', error_func=custom_error)
 
 
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|

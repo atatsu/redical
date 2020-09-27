@@ -258,3 +258,14 @@ async def test_pipeline_pool_closing(pool):
 	with pytest.raises(PoolClosingError, match='Pool is closing'):
 		async with pool:
 			pass
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Error responses
+
+async def test_custom_error_response(pool):
+	def custom_error(exc):
+		return ValueError(str(exc).replace('ERR ', ''))
+
+	with pytest.raises(ValueError, match="wrong number of arguments for 'hset' command"):
+		await pool.execute('hset', 'mykey', error_func=custom_error)
