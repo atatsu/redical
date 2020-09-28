@@ -9,6 +9,7 @@ from typing import (
 from .abstract import AbstractParser, RedicalResource
 from .command import (
 	KeyCommandsMixin,
+	HashCommandsMixin,
 	ServerCommandsMixin,
 	SetCommandsMixin,
 	StringCommandsMixin,
@@ -56,6 +57,7 @@ class Redical(
 	Generic[R],
 	RedicalBase,
 	KeyCommandsMixin,
+	HashCommandsMixin,
 	ServerCommandsMixin,
 	SetCommandsMixin,
 	StringCommandsMixin

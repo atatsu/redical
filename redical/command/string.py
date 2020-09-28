@@ -44,7 +44,7 @@ class StringCommandsMixin:
 		* stralgo
 		* strlen
 	"""
-	def get(self: Executable, key: str, **kwargs: Any) -> Awaitable[str]:
+	def get(self: Executable, key: str, /, **kwargs: Any) -> Awaitable[str]:
 		"""
 		Retrieve the value of a key.
 
@@ -59,7 +59,7 @@ class StringCommandsMixin:
 		"""
 		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key), **kwargs)
 
-	def incr(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
+	def incr(self: Executable, key: str, /, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Increments the number stored at `key` by one.
 
@@ -74,6 +74,7 @@ class StringCommandsMixin:
 	def set(
 		self: Executable,
 		key: str,
+		/,
 		value: AnyStr,
 		*,
 		expire_in_seconds: Optional[Union[int, float]] = None,
