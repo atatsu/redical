@@ -43,7 +43,7 @@ class HashCommandsMixin:
 			*field_value_pairs: A variable length list of field/value pairs to set in the hash.
 
 				Example:
-					('field1', 'value1'), ('field2', 'value2'), ('field3', 'value3')
+					*[('field1', 'value1'), ('field2', 'value2'), ('field3', 'value3')]
 					or
 					*dict(field1='value1', field2='value2', field3='value3').items()
 
@@ -52,9 +52,15 @@ class HashCommandsMixin:
 
 		Raises:
 			TypeError: If the supplied `key` doesn't contain a hash.
+			ValueError: Wrong number of arguments for `field_value_pairs` (unequal field count
+				versus value count).
 		"""
-		command: List[Any] = ['HSET', key, field, value]
+		command: List[Any] = ['HSET', key]
 		x: Any
 		y: Any
-		command.extend([y for x in field_value_pairs for y in x])
+		flattened: List[Any] = [field, value]
+		flattened.extend([y for x in field_value_pairs for y in x])
+		if len(flattened) % 2 != 0:
+			raise ValueError('Number of supplied fields does not match the number of supplied values')
+		command.extend(flattened)
 		return self.execute(*command, error_func=_hset_error_wrapper)
