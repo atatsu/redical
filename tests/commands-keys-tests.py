@@ -5,6 +5,16 @@ from redical import InvalidKeyError, NoExpiryError
 pytestmark = [pytest.mark.asyncio]
 
 
+async def test_delete(redical):
+	assert True is await redical.set('foo', 'bar')
+	assert True is await redical.set('bar', 'baz')
+	assert True is await redical.set('baz', 'foo')
+	assert 1 == await redical.delete('foo')
+	assert 2 == await redical.delete('bar', 'baz')
+	assert 0 == await redical.delete('foobar')
+	assert 0 == await redical.exists('foo', 'bar', 'baz')
+
+
 async def test_exists_no_key(redical):
 	assert 0 == await redical.exists('mykey')
 

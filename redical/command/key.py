@@ -19,12 +19,12 @@ _pttl_error_wrapper = _ttl_error_wrapper
 class KeyCommandsMixin:
 	"""
 	Implemented commands:
+		* del
 		* exists
 		* pttl
 		* ttl
 
 	TODO:
-		* del
 		* dump
 		* expire
 		* expireat
@@ -46,6 +46,15 @@ class KeyCommandsMixin:
 		* wait
 		* scan
 	"""
+	def delete(self: Executable, key: str, *keys: str, **kwargs: Any) -> Awaitable[int]:
+		"""
+		Remove the specified keys.
+
+		Returns:
+			Number of keys removed.
+		"""
+		return self.execute('DEL', key, *keys, **kwargs)
+
 	def exists(self: Executable, *keys: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Return a count for the number of supplied keys that exist.
