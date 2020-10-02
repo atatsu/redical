@@ -5,6 +5,10 @@ from ..exception import InvalidKeyError, NoExpiryError
 from ..mixin import Executable
 
 
+def _expire_convert_to_bool(response: int) -> bool:
+	return bool(response)
+
+
 def _ttl_error_wrapper(response: int, *, key: str) -> int:
 	if response == -2:
 		raise InvalidKeyError(key)
@@ -21,12 +25,12 @@ class KeyCommandsMixin:
 	Implemented commands:
 		* del
 		* exists
+		* expire
 		* pttl
 		* ttl
 
 	TODO:
 		* dump
-		* expire
 		* expireat
 		* keys
 		* migrate
@@ -70,6 +74,19 @@ class KeyCommandsMixin:
 			will return `2`.
 		"""
 		return self.execute('EXISTS', *keys, **kwargs)
+
+	def expire(self: Executable, key: str, /, timeout: int, **kwargs: Any) -> Awaitable[bool]:
+		"""
+		Set a timeout on `key` in seconds.
+
+		Args:
+			key: Name of the key to set the timeout on.
+			timeout: Number of seconds in which to expire `key`.
+
+		Returns:
+			True if the timeout was set, False if `key` does not exist.
+		"""
+		return self.execute('EXPIRE', key, int(timeout), conversion_func=_expire_convert_to_bool, **kwargs)
 
 	def pttl(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
 		"""

@@ -28,7 +28,23 @@ class SetCommandsMixin:
 		* sunionstore
 		* sscan
 	"""
-	def smembers(self: Executable, key: str, **kwargs: Any) -> Awaitable[Set[Any]]:
+	def sadd(self: Executable, key: str, *members: Any, **kwargs: Any) -> Awaitable[int]:
+		"""
+		Add the specified members to the set stored at `key`. Specified members that are
+		already a member of this set are ignored. If `key` does not exist a new set is
+		created before adding the specified members.
+
+		Args:
+			key: Name of the key set is stored at.
+			*members: Variable list of members to add.
+
+		Returns:
+			The number of members that were added to the set, not including all the members
+				already present in the set.
+		"""
+		return self.execute('SADD', key, *members, conversion_func=int, **kwargs)
+
+	def smembers(self: Executable, key: str, **kwargs: Any) -> Awaitable[Set[str]]:
 		"""
 		Returns all the members of the set value stored at `key`.
 

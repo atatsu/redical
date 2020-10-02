@@ -38,6 +38,7 @@ from .exception import (
 	WatchError,
 )
 from .parser import Parser
+from .util import undefined
 
 if TYPE_CHECKING:
 	from asyncio import Future, StreamReader, StreamWriter, Task
@@ -50,10 +51,6 @@ LOG: Final[logging.Logger] = logging.getLogger(__name__)
 class Address(NamedTuple):
 	host: str
 	port: int
-
-
-class undefined:
-	pass
 
 
 @dataclass

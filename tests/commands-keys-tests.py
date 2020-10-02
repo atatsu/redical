@@ -30,6 +30,13 @@ async def test_exists_multiple(redical):
 	assert 2 == await redical.exists('mykey1', 'mykey2', 'mykey3')
 
 
+async def test_expire(redical):
+	assert True is await redical.set('mykey', 'foo')
+	assert True is await redical.expire('mykey', 10)
+	assert 10 == await redical.ttl('mykey')
+	assert False is await redical.expire('notakey', 10)
+
+
 async def test_pttl_no_key(redical):
 	with pytest.raises(InvalidKeyError, match="Key with name 'mykey' does not exist"):
 		await redical.pttl('mykey')
