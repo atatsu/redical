@@ -4,10 +4,12 @@ import asyncio
 import contextvars
 import logging
 from collections import deque
+from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import (
 	Any,
 	AnyStr,
+	AsyncIterator,
 	Awaitable,
 	Deque,
 	Final,
@@ -203,6 +205,21 @@ class ConnectionPool(RedicalResource):
 			command, *args, conversion_func=conversion_func, encoding=encoding, error_func=error_func
 		)
 
+	@asynccontextmanager
+	async def transaction(self, *watch_keys: str) -> AsyncIterator[Connection]:
+		if self.is_closed:
+			raise PoolClosedError()
+		if self.is_closing:
+			raise PoolClosingError()
+
+		conn: Connection = await self._acquire_unused_connection(remove_from_pool=True)
+		tr: Connection
+		try:
+			async with conn.transaction(*watch_keys) as tr:
+				yield tr
+		finally:
+			await self._release_connection(conn)
+
 	async def wait_closed(self) -> None:
 		if not self._closing:
 			raise RuntimeError('Pool is not closing')
@@ -247,6 +264,7 @@ class ConnectionPool(RedicalResource):
 
 				if remove_from_pool:
 					self._pool.remove(conn)
+					self._in_use.add(conn)
 					LOG.debug('sequestered connection from pool %s', self)
 				LOG.debug('retrieved connection from pool')
 				return conn
@@ -304,7 +322,6 @@ class ConnectionPool(RedicalResource):
 		# create another one
 		conn: Connection = await self._acquire_unused_connection(remove_from_pool=True)
 		connection_ctx.set(conn)
-		self._in_use.add(conn)
 		return await conn.__aenter__()
 
 	async def __aexit__(

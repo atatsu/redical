@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from types import TracebackType
 from typing import (
 	cast,
 	Any,
 	AnyStr,
+	AsyncIterator,
 	Awaitable,
 	Deque,
 	Final,
@@ -26,7 +28,15 @@ from urllib.parse import unquote
 from yarl import URL
 
 from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
-from .exception import ConnectionClosedError, ConnectionClosingError, PipelineError, ResponseError
+from .exception import (
+	AbortTransaction,
+	ConnectionClosedError,
+	ConnectionClosingError,
+	PipelineError,
+	ResponseError,
+	TransactionError,
+	WatchError,
+)
 from .parser import Parser
 
 if TYPE_CHECKING:
@@ -67,7 +77,8 @@ async def create_connection(
 	encoding: str = 'utf-8',
 	# theoretical maximum size of a TCP packet
 	max_chunk_size: int = 65535,
-	parser: Optional[AbstractParser] = None
+	parser: Optional[AbstractParser] = None,
+	timeout: Union[float, int] = 10,
 ) -> Connection:
 	"""
 	"""
@@ -114,7 +125,8 @@ async def create_connection(
 		db=db,
 		encoding=encoding,
 		max_chunk_size=max_chunk_size,
-		parser=parser
+		parser=parser,
+		timeout=timeout
 	)
 	# TODO: do a ping to verify connection is good
 	LOG.info(f'Successfully connected to {address}')
@@ -222,6 +234,7 @@ class Connection(RedicalResource):
 	_db: int
 	_encoding: str
 	_in_pipeline: bool
+	_in_transaction: bool
 	_max_chunk_size: int
 	_parser: AbstractParser
 	_pipeline_buffer: bytearray
@@ -229,6 +242,8 @@ class Connection(RedicalResource):
 	_read_data_cancel_event: asyncio.Event
 	_read_data_task: 'Task'
 	_resolvers: Deque[Resolver]
+	_timeout: float
+	_watched_keys: Tuple[str, ...]
 	_writer: 'StreamWriter'
 
 	@property
@@ -269,13 +284,15 @@ class Connection(RedicalResource):
 		db: int,
 		encoding: str,
 		max_chunk_size: int,
-		parser: AbstractParser
+		parser: AbstractParser,
+		timeout: Union[float, int]
 	) -> None:
 		self._address = address
 		self._closing = False
 		self._db = db
 		self._encoding = encoding
 		self._in_pipeline = False
+		self._in_transaction = False
 		self._max_chunk_size = max_chunk_size
 		self._parser = parser
 		self._pipeline_buffer = bytearray()
@@ -284,6 +301,8 @@ class Connection(RedicalResource):
 		self._read_data_task = asyncio.create_task(self._read_data())
 		self._read_data_task.add_done_callback(self._set_read_state)
 		self._resolvers = deque()
+		self._timeout = float(timeout)
+		self._watched_keys = ()
 		self._writer = writer
 
 	def close(self) -> None:
@@ -318,7 +337,7 @@ class Connection(RedicalResource):
 
 		cmd: bytes = _build_command(command, *args)
 		if not self._in_pipeline:
-			LOG.debug(f'executing command: {cmd!r}')
+			LOG.debug(f'executing command: {cmd!r} [{self}]')
 			self._writer.write(cmd)
 			asyncio.create_task(self._writer.drain())
 		else:
@@ -331,6 +350,32 @@ class Connection(RedicalResource):
 			Resolver(encoding=_encoding, future=future, conversion_func=conversion_func, error_func=error_func)
 		)
 		return future
+
+	@asynccontextmanager
+	async def transaction(self, *watch_keys: str) -> AsyncIterator[Connection]:
+		if self.is_closed:
+			raise ConnectionClosedError()
+		if self.is_closing:
+			raise ConnectionClosingError()
+		if self._in_transaction:
+			raise TransactionError('Already in transaction mode')
+
+		self._in_transaction = True
+		self._watched_keys = watch_keys
+		if len(watch_keys) > 0:
+			await self.execute('WATCH', *watch_keys)
+			LOG.debug(f'WATCHing keys {", ".join(watch_keys)!r}')
+		try:
+			yield self
+		except Exception:
+			LOG.exception('Unhandled error while in transaction block')
+			if len(watch_keys) > 0:
+				LOG.debug(f'[{self}] UNWATCHing keys {self._watched_keys}')
+				await self.execute('UNWATCH')
+			raise
+		finally:
+			self._in_transaction = False
+			self._watched_keys = ()
 
 	async def wait_closed(self) -> None:
 		if not self._closing:
@@ -348,22 +393,47 @@ class Connection(RedicalResource):
 				LOG.debug(f'received data: {data!r}')
 				self._parser.feed(data)
 				parsed: Any
+				resolver: Resolver
 				while (parsed := self._parser.gets()) is not False:
 					LOG.debug(f'parsed response object: {parsed}')
-					# TODO: what if there is no future to pop?
-					resolver: Resolver = self._resolvers.popleft()
-					try:
-						if isinstance(parsed, ResponseError):
-							error: Exception = parsed
-							if resolver.error_func is not None:
-								error = resolver.error_func(error)
-							resolver.future.set_exception(error)
-							continue
-						decoded: Any = _decode(parsed, resolver.encoding, resolver.conversion_func)
-						LOG.debug(f'decoded response: {decoded}')
-						resolver.future.set_result(decoded)
-					except Exception as ex:
-						resolver.future.set_exception(ex)
+
+					parsed_results: List[Any]
+					if self._in_transaction and parsed in ('QUEUED', b'QUEUED'):
+						# we need to wait until the EXEC response to actually set
+						# the futures' results
+						continue
+
+					if self._in_transaction and isinstance(parsed, list):
+						# EXEC results received
+						parsed_results = parsed
+					elif self._in_transaction and parsed is None:
+						# set a `WatchError` on all futures that are queued up
+						while len(self._resolvers) > 0:
+							resolver = self._resolvers.popleft()
+							resolver.future.set_exception(WatchError(*self._watched_keys))
+						continue
+					else:
+						parsed_results = [parsed]
+
+					for parsed in parsed_results:
+						# convert 'OK' responses to `True`
+						if parsed in ('OK', b'OK'):
+							parsed = True
+
+						# TODO: what if there is no future to pop?
+						resolver = self._resolvers.popleft()
+						try:
+							if isinstance(parsed, ResponseError):
+								error: Exception = parsed
+								if resolver.error_func is not None:
+									error = resolver.error_func(error)
+								resolver.future.set_exception(error)
+								continue
+							decoded: Any = _decode(parsed, resolver.encoding, resolver.conversion_func)
+							LOG.debug(f'decoded response: {decoded}')
+							resolver.future.set_result(decoded)
+						except Exception as ex:
+							resolver.future.set_exception(ex)
 			except asyncio.IncompleteReadError:
 				# lost connection to remote host
 				break
@@ -392,25 +462,78 @@ class Connection(RedicalResource):
 	async def __aexit__(
 		self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[TracebackType]
 	) -> Optional[bool]:
+		aborting: bool = False
+		erroring: bool = False
+		if exc is not None and isinstance(exc, AbortTransaction):
+			LOG.debug('transaction aborted')
+			aborting = True
+		elif exc is not None and exc_type is not None and tb is not None:
+			LOG.error('Unhandled error while in pipeline block', exc_info=(exc_type, exc, tb))
+			erroring = True
+
 		if not self._pipeline_buffer:
 			# no commands executed
 			self._in_pipeline = False
+			if len(self._watched_keys) > 0:
+				LOG.debug(f'[{self}] UNWATCHing keys {self._watched_keys}')
+				await self.execute('UNWATCH')
+			if aborting:
+				# suppress the `AbortTransaction` exception
+				return True
 			LOG.debug('pipeline exiting with no buffered commands')
 			return None
-		resolvers: List[Resolver] = list(self._resolvers)
+
 		resolver: Resolver
-		LOG.debug('writing pipeline buffer')
-		self._writer.write(self._pipeline_buffer)
-		await self._writer.drain()
+		resolvers: List[Resolver]
+		if aborting or erroring:
+			resolvers = []
+			while len(self._resolvers) > 0:
+				resolver = self._resolvers.popleft()
+				resolver.future.set_exception(cast(BaseException, exc))
+				resolvers.append(resolver)
+		else:
+			resolvers = list(self._resolvers)
+
+		if self._in_transaction and not aborting:
+			self._pipeline_buffer = bytearray(_build_command('MULTI')) + self._pipeline_buffer
+			future: 'Future' = PipelineFutureWrapper(asyncio.get_running_loop().create_future())
+			self._resolvers.insert(
+				0,
+				Resolver(encoding=self._encoding, future=future, conversion_func=None, error_func=None)
+			)
+			# The `EXEC` commaned is replied to with (if the transaction was executed) an array
+			# of all replies for all commands executed in the EXEC block. Since it doesn't have
+			# it's own dedicated reply we don't need to add a future for it
+			self._pipeline_buffer.extend(_build_command('EXEC'))
+
+		if not aborting and not erroring:
+			LOG.debug(f'writing pipeline buffer: {self._pipeline_buffer!r} [{self}]')
+			self._writer.write(self._pipeline_buffer)
+			await self._writer.drain()
+
 		self._in_pipeline = False
+		self._pipeline_buffer = bytearray()
+
 		for resolver in resolvers:
 			cast(PipelineFutureWrapper, resolver.future).clear_in_progress()
-		self._pipeline_buffer = bytearray()
-		await asyncio.gather(*[resolver.future for resolver in resolvers], return_exceptions=True)
+		await asyncio.wait_for(
+			asyncio.gather(*[resolver.future for resolver in resolvers], return_exceptions=True),
+			timeout=self._timeout
+		)
+		if any(isinstance(resolver.future.exception(), WatchError) for resolver in resolvers):
+			raise WatchError(*self._watched_keys)
+
+		if aborting:
+			LOG.debug(f'[{self}] UNWATCHing keys {self._watched_keys}')
+			await self.execute('UNWATCH')
+			# suppress the `AbortTransaction` exception
+			return True
 		return None
 
 	def __repr__(self) -> str:
 		return (
-			f'<Connection(address={self._address}, db={self._db}, is_closed={self.is_closed}, '
-			f'is_closing={self.is_closing})>'
+			f'<Connection[{id(self)}]('
+			f'address={self._address}, db={self._db}, in_pipeline={self._in_pipeline}, '
+			f'in_transaction={self._in_transaction}, is_closing={self.is_closing}, is_closed={self.is_closed}'
+			')>'
 		)

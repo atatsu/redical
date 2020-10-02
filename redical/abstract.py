@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
+from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, AnyStr, Awaitable, Callable, List, Optional, Tuple, Type
+from typing import Any, AnyStr, AsyncIterator, Awaitable, Callable, List, Optional, Tuple, Type
 
 __all__: List[str] = ['AbstractParser', 'RedicalResource']
 
@@ -74,6 +75,14 @@ class RedicalResource(ABC):
 		"""
 		Execute a Redis command through the underlying connection or pool.
 		"""
+
+	@asynccontextmanager
+	@abstractmethod
+	async def transaction(self, *watch_keys: str) -> AsyncIterator[RedicalResource]:
+		"""
+		Starts a transaction block.
+		"""
+		yield self
 
 	@abstractmethod
 	async def wait_closed(self) -> None:

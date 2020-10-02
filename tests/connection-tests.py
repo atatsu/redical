@@ -9,11 +9,14 @@ from yarl import URL
 
 from redical import (
 	create_connection,
+	AbortTransaction,
 	Connection,
 	ConnectionClosedError,
 	ConnectionClosingError,
 	PipelineError,
 	ResponseError,
+	TransactionError,
+	WatchError,
 )
 
 pytestmark = [pytest.mark.asyncio]
@@ -72,7 +75,20 @@ async def disconnecting_server(unused_port):
 
 @pytest.fixture
 async def conn(redis_uri):
-	conn = await create_connection(redis_uri)
+	conn = await create_connection(redis_uri, timeout=1)
+	await conn.execute('flushdb')
+	yield conn
+	if not conn.is_closed and conn.is_closing:
+		await conn.wait_closed()
+		return
+	if not conn.is_closed:
+		conn.close()
+		await conn.wait_closed()
+
+
+@pytest.fixture
+async def conn2(redis_uri):
+	conn = await create_connection(redis_uri, timeout=1)
 	await conn.execute('flushdb')
 	yield conn
 	if not conn.is_closed and conn.is_closing:
@@ -338,3 +354,155 @@ async def test_pipeline_no_commands(conn):
 	_writer.write.assert_not_called()
 	_writer.drain.assert_not_called()
 	assert False is conn._in_pipeline
+
+
+async def test_pipeline_error_prevents_buffer_write(conn):
+	with pytest.raises(ValueError):
+		async with conn as pipe:
+			fut1 = pipe.execute('SET', 'foo', 'bar')
+			fut2 = pipe.execute('SET', 'bar', 'baz')
+			raise ValueError('an error')
+	assert 0 == await conn.execute('EXISTS', 'foo')
+	assert 0 == await conn.execute('EXISTS', 'bar')
+	with pytest.raises(ValueError):
+		await fut1
+	with pytest.raises(ValueError):
+		await fut2
+	assert False is conn._in_pipeline
+	assert 0 == len(conn._pipeline_buffer)
+	assert 0 == len(conn._resolvers)
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Transactions
+
+async def test_transaction_basics(conn):
+	"""
+	Scenario:
+		WATCH mykey
+		val = GET mykey
+		val = val + 1
+		MULTI
+		SET mykey $val
+		EXEC
+	"""
+	await conn.execute('SET', 'mykey', 1)
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		async with conn.transaction('mykey', 'myotherkey') as t:
+			assert True is conn._in_transaction
+			val = int(await asyncio.wait_for(t.execute('GET', 'mykey'), 1))
+			val += 1
+			async with t as pipe:
+				assert True is pipe._in_pipeline
+				fut = pipe.execute('SET', 'mykey', val)
+		_execute.assert_any_call('WATCH', 'mykey', 'myotherkey')
+	assert False is conn._in_transaction
+	assert True is await asyncio.wait_for(fut, 1)
+	assert 2 == int(await conn.execute('GET', 'mykey'))
+
+
+async def test_transaction_no_watch(conn):
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		async with conn.transaction():
+			pass
+		_execute.assert_not_called()
+
+
+async def test_transaction_watch_error(conn, conn2):
+	await conn.execute('SET', 'mykey', 1)
+	async with conn.transaction('mykey', 'myotherkey') as t:
+		val = int(await t.execute('GET', 'mykey'))
+		val += 1
+		with pytest.raises(WatchError, match='Transaction aborted, WATCHed keys: mykey, myotherkey'):
+			async with t as pipe:
+				await conn2.execute('SET', 'mykey', 'foo')
+				fut = pipe.execute('SET', 'mykey', val)
+	assert 'foo' == await conn.execute('GET', 'mykey')
+	with pytest.raises(WatchError, match='Transaction aborted, WATCHed keys: mykey, myotherkey'):
+		await asyncio.wait_for(fut, 1)
+
+
+async def test_transaction_user_abort(conn):
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		async with conn.transaction('akey') as t:
+			try:
+				async with t as pipe:
+					fut1 = pipe.execute('SET', 'key1', 'value1')
+					fut2 = pipe.execute('SET', 'key2', 'value2')
+					fut3 = pipe.execute('SET', 'key3', 'value3')
+					raise AbortTransaction()
+			except Exception:
+				pytest.fail('did not abort gracefully')
+		_execute.assert_called_with('UNWATCH')
+
+	assert False is conn._in_pipeline
+	assert 0 == len(conn._pipeline_buffer)
+	assert 0 == len(conn._resolvers)
+	assert 0 == len(conn._watched_keys)
+	assert 0 == await conn.execute('EXISTS', 'key1')
+	assert 0 == await conn.execute('EXISTS', 'key2')
+	assert 0 == await conn.execute('EXISTS', 'key3')
+
+	with pytest.raises(AbortTransaction):
+		await fut1
+	with pytest.raises(AbortTransaction):
+		await fut2
+	with pytest.raises(AbortTransaction):
+		await fut3
+
+
+async def test_transaction_user_abort_no_commands(conn):
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		async with conn.transaction('akey') as t:
+			try:
+				async with t:
+					raise AbortTransaction()
+			except Exception as ex:
+				pytest.fail(f'did not abort gracefully: {ex}')
+		_execute.assert_called_with('UNWATCH')
+	assert False is conn._in_pipeline
+	assert 0 == len(conn._pipeline_buffer)
+	assert 0 == len(conn._resolvers)
+	assert 0 == len(conn._watched_keys)
+
+
+async def test_transaction_error_prevents_buffer_write(conn):
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		with pytest.raises(ValueError):
+			async with conn.transaction('akey'):
+				raise ValueError('an error')
+		_execute.assert_called_with('UNWATCH')
+	assert False is conn._in_transaction
+	assert 0 == len(conn._pipeline_buffer)
+	assert 0 == len(conn._resolvers)
+	assert 0 == len(conn._watched_keys)
+
+
+async def test_transaction_watch_no_buffered_commands(conn):
+	with mock.patch.object(conn, 'execute', wraps=conn.execute) as _execute:
+		async with conn.transaction('mykey') as t:
+			async with t:
+				pass
+		_execute.assert_called_with('UNWATCH')
+
+
+async def test_transaction_already_in_transaction(conn):
+	async with conn.transaction():
+		with pytest.raises(TransactionError, match='Already in transaction mode'):
+			async with conn.transaction():
+				pass
+
+
+async def test_transaction_closed(conn):
+	conn.close()
+	await conn.wait_closed()
+	with pytest.raises(ConnectionClosedError, match='Connection is closed'):
+		async with conn.transaction():
+			pass
+
+
+async def test_transaction_closing(conn):
+	conn.close()
+	with pytest.raises(ConnectionClosingError, match='Connection is closing'):
+		async with conn.transaction():
+			pass

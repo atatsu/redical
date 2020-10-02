@@ -2,6 +2,7 @@ from typing import List, Optional
 
 __all__: List[str] = [
 	'RedicalError',
+	'AbortTransaction',
 	'ConnectionError',
 	'ConnectionClosedError',
 	'ConnectionClosingError',
@@ -12,6 +13,8 @@ __all__: List[str] = [
 	'PoolClosingError',
 	'PoolClosedError',
 	'ResponseError',
+	'TransactionError',
+	'WatchError',
 ]
 
 
@@ -52,6 +55,25 @@ class NoExpiryError(KeyError):
 class PipelineError(RedicalError):
 	"""
 	"""
+
+
+class TransactionError(RedicalError):
+	"""
+	"""
+
+
+class AbortTransaction(TransactionError):
+	"""
+	Users should raise this error to abort a transaction before
+	it is executed.
+	"""
+
+
+class WatchError(TransactionError):
+	"""
+	"""
+	def __init__(self, *watch_keys) -> None:
+		super().__init__(f'Transaction aborted, WATCHed keys: {", ".join(watch_keys)}')
 
 
 class ConnectionError(RedicalError):

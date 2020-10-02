@@ -1,9 +1,23 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import (
-	cast, overload, Any, AnyStr, Awaitable, Final, Generic, List, Optional, Tuple, Type, TypeVar, Union,
+	cast,
+	overload,
+	Any,
+	AnyStr,
+	AsyncIterator,
+	Awaitable,
+	Final,
+	Generic,
+	List,
+	Optional,
+	Tuple,
+	Type,
+	TypeVar,
+	Union,
 )
 
 from .abstract import AbstractParser, RedicalResource
@@ -15,10 +29,10 @@ from .command import (
 	StringCommandsMixin,
 )
 from .connection import create_connection, Connection
-from .exception import PipelineError
+from .exception import PipelineError, TransactionError
 from .pool import create_pool, ConnectionPool
 
-__all__: List[str] = ['Redical', 'Pipeline']
+__all__: List[str] = ['Redical', 'Pipeline', 'Transaction']
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -53,6 +67,14 @@ class Pipeline:
 		raise PipelineError('Do not close from within pipeline')
 
 
+class Transaction:
+	def close(self) -> None:
+		raise TransactionError('Do not close from within transaction')
+
+	async def wait_closed(self) -> None:
+		raise TransactionError('Do not close from within transaction')
+
+
 class Redical(
 	Generic[R],
 	RedicalBase,
@@ -72,6 +94,13 @@ class Redical(
 
 	def close(self) -> None:
 		self._resource.close()
+
+	@asynccontextmanager
+	async def transaction(self, *watch_keys: str) -> AsyncIterator[R]:
+		conn: RedicalResource
+		async with self._resource.transaction(*watch_keys) as conn:
+			T: Type[R] = type('Transaction', (Transaction, self.__class__), {})
+			yield T(conn)
 
 	async def wait_closed(self) -> None:
 		await self._resource.wait_closed()

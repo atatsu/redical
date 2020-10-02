@@ -1,5 +1,3 @@
-from typing import Any
-
 from .abstract import AbstractParser
 from .exception import ResponseError
 
@@ -20,11 +18,11 @@ class Parser(ParserBase, AbstractParser):
 		if not issubclass(ParserBase, PyParser):
 			super().__init__(replyError=ResponseError)
 
-	def gets(self) -> Any:
-		parsed: Any = super().gets()
-		if parsed is False:
-			return parsed
-		# convert 'OK' responses to bool
-		if parsed == b'OK':
-			return True
-		return parsed
+	# def gets(self) -> Any:
+	#     parsed: Any = super().gets()
+	#     if parsed is False:
+	#         return parsed
+	#     # convert 'OK' responses to bool
+	#     if parsed == b'OK':
+	#         return True
+	#     return parsed

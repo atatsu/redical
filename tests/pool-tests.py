@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from redical import create_pool, PoolClosedError, PoolClosingError
+from redical import create_pool, PoolClosedError, PoolClosingError, WatchError
 
 pytestmark = [pytest.mark.asyncio]
 
@@ -91,7 +91,7 @@ async def test_acquiring_connection_rotates_pool(pool):
 
 async def test_release_drop_closed_connection(pool):
 	conn = await pool._acquire_unused_connection(remove_from_pool=True)
-	assert 1 == pool.size
+	assert 2 == pool.size
 	conn.close()
 	await conn.wait_closed()
 	await pool._release_connection(conn)
@@ -101,7 +101,7 @@ async def test_release_drop_closed_connection(pool):
 
 async def test_release_drop_closing_connection(pool):
 	conn = await pool._acquire_unused_connection(remove_from_pool=True)
-	assert 1 == pool.size
+	assert 2 == pool.size
 	conn.close()
 	await pool._release_connection(conn)
 	await conn.wait_closed()
@@ -257,6 +257,60 @@ async def test_pipeline_pool_closing(pool):
 	pool.close()
 	with pytest.raises(PoolClosingError, match='Pool is closing'):
 		async with pool:
+			pass
+
+
+# |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+# Transactions
+
+async def test_transaction_sequester_connection(pool):
+	async with pool.transaction():
+		assert 2 == pool.size
+		assert 1 == pool.available
+
+
+async def test_transaction_releases_connection(pool):
+	async with pool.transaction():
+		assert 2 == pool.size
+		assert 1 == pool.available
+	assert 2 == pool.size
+	assert 2 == pool.available
+
+
+async def test_transaction_release_with_error(pool):
+	with pytest.raises(ValueError):
+		async with pool.transaction():
+			raise ValueError('an error')
+	assert 2 == pool.size
+	assert 2 == pool.available
+
+
+async def test_transaction_watch_error(pool):
+	await pool.execute('SET', 'mykey', 1)
+	async with pool.transaction('mykey') as t:
+		val = int(await t.execute('GET', 'mykey'))
+		val += 1
+		with pytest.raises(WatchError, match='Transaction aborted, WATCHed keys: mykey'):
+			async with t as pipe:
+				await pool.execute('SET', 'mykey', 'foo')
+				fut = pipe.execute('SET', 'mykey', val)
+	assert 'foo' == await pool.execute('GET', 'mykey')
+	with pytest.raises(WatchError, match='Transaction aborted, WATCHed keys: mykey'):
+		await fut
+
+
+async def test_transaction_pool_closed(pool):
+	pool.close()
+	await pool.wait_closed()
+	with pytest.raises(PoolClosedError, match='Pool is closed'):
+		async with pool.transaction():
+			pass
+
+
+async def test_transaction_pool_closing(pool):
+	pool.close()
+	with pytest.raises(PoolClosingError, match='Pool is closing'):
+		async with pool.transaction():
 			pass
 
 
