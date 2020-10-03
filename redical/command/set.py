@@ -10,6 +10,7 @@ def _smembers_convert_to_set(response: Sequence[Any]) -> Set[Any]:
 class SetCommandsMixin:
 	"""
 	Implemented commands:
+		* sismember
 		* smembers
 		* srem
 
@@ -20,7 +21,6 @@ class SetCommandsMixin:
 		* sdiffstore
 		* sinter
 		* sinterstore
-		* sismember
 		* smove
 		* spop
 		* srandmember
@@ -36,13 +36,26 @@ class SetCommandsMixin:
 
 		Args:
 			key: Name of the key set is stored at.
-			*members: Variable list of members to add.
+			*members: Variable list of items to add.
 
 		Returns:
 			The number of members that were added to the set, not including all the members
 				already present in the set.
 		"""
 		return self.execute('SADD', key, *members, conversion_func=int, **kwargs)
+
+	def sismember(self: Executable, key: str, /, member: Any, **kwargs: Any) -> Awaitable[bool]:
+		"""
+		Check whether a specified item beongs to a set.
+
+		Args:
+			key: Name of the key set is stored at.
+			member: Item to check set membership of.
+
+		Returns:
+			True if `member` is in the set, False otherwise.
+		"""
+		return self.execute('SISMEMBER', key, member, conversion_func=bool, **kwargs)
 
 	def smembers(self: Executable, key: str, **kwargs: Any) -> Awaitable[Set[str]]:
 		"""
