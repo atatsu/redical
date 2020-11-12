@@ -23,7 +23,7 @@ from typing import (
 
 from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
 from .connection import create_connection, undefined, Connection
-from .exception import PoolClosedError, PoolClosingError
+from .exception import PoolClosedError, PoolClosingError, ResponseError
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -201,9 +201,13 @@ class ConnectionPool(RedicalResource):
 			raise PoolClosingError()
 
 		conn: Connection = await self._acquire_unused_connection()
-		return await conn.execute(
-			command, *args, conversion_func=conversion_func, encoding=encoding, error_func=error_func
-		)
+		try:
+			return await conn.execute(
+				command, *args, conversion_func=conversion_func, encoding=encoding, error_func=error_func
+			)
+		except ResponseError:
+			LOG.exception(f'Unhandled exception while executing command: {command!r}, args: {args}')
+			raise
 
 	@asynccontextmanager
 	async def transaction(self, *watch_keys: str) -> AsyncIterator[Connection]:
