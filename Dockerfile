@@ -7,11 +7,11 @@ WORKDIR /code
 RUN script/cleanup \
 	# these are needed for the `cryptography` pip package
 	# which is used by `poetry`
-	&& apk add --no-cache libressl-dev musl-dev libffi-dev \
+	&& apk add libressl-dev musl-dev libffi-dev \
 	# --
-	&& apk add --no-cache build-base \
+	&& apk add build-base \
 	&& export PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
-	&& pip install poetry==1.0.5 \
+	&& pip install poetry \
 	&& poetry config virtualenvs.create false \
 	&& poetry install \
 	&& rm -rf .git \
@@ -29,6 +29,6 @@ COPY --from=install-deps /usr/local/lib/python3.8/site-packages /usr/local/lib/p
 COPY --from=install-deps /usr/local/bin /usr/local/bin
 COPY --from=install-deps /root/.config/pypoetry /root/.config/pypoetry
 ENV PYTHONASYNCIODEBUG=1
-RUN apk add --no-cache build-base \
+RUN apk add build-base \
 	&& rm -rf /code;
 WORKDIR /code

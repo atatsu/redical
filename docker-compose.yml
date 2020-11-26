@@ -9,12 +9,13 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    container_name: redical-tests
     depends_on:
       - redis
     entrypoint:
       - sh
       - -c
-      - "poetry install && script/test-continuous"
+      - script/test-continuous
     environment:
       - PYTHONASYNCIODEBUG=1
       - REDICAL_REDIS_URI=redis://redis:6379
@@ -24,6 +25,7 @@ services:
       - ./:/code:rw
 
   redis:
+    container_name: redical-redis
     image: redis:latest
     ports:
       - ${REDICAL_REDIS_PORT:-6379}:6379
