@@ -11,6 +11,7 @@ def _hset_error_wrapper(exc: Exception) -> Exception:
 	return exc
 
 
+_hdel_error_wrapper = _hset_error_wrapper
 _hmget_error_wrapper = _hset_error_wrapper
 _hgetall_error_wrapper = _hset_error_wrapper
 
@@ -29,12 +30,12 @@ def _hgetall_convert_to_dict(response: Sequence[str]) -> Dict[str, Any]:
 class HashCommandsMixin:
 	"""
 	Implemented commands:
+		* hdel
 		* hgetall
 		* hmget
 		* hset
 
 	TODO:
-		* hdel
 		* hexists
 		* hget
 		* hincrby
@@ -46,6 +47,24 @@ class HashCommandsMixin:
 		* hvals
 		* hscan
 	"""
+	def hdel(self: Executable, key: str, *fields: str, **kwargs: Any) -> Awaitable[int]:
+		"""
+		Removes the specified fields from the hash stored at `key`. Specified fields
+		that do not exist within the hash are ignored. If `key` does not exist it is
+		treated as an empty hash and this method returns `0`.
+
+		Args:
+			key: Name of the hash key to delete fields from.
+			*fields: A variable length list of field names to delete.
+
+		Returns: The number of fields that were removed from the hash, not including
+			specified but non-existing fields.
+
+		Raises:
+			TypeError: If the supplied `key` doesn't contain a hash.
+		"""
+		return self.execute('HDEL', key, *fields, error_func=_hdel_error_wrapper, **kwargs)
+
 	def hgetall(self: Executable, key: str, **kwargs: Any) -> Awaitable[Dict[str, Any]]:
 		"""
 		Returns all fields and values of the hash stored at `key`.

@@ -158,6 +158,7 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 		elif isinstance(arg, float):
 			_arg = b'%a' % arg
 		else:
+			LOG.warning(f'Unable to encode argument, command: {command!r}, args: {args}')
 			raise NotImplementedError(f'Unable to encode type {type(arg)}')
 		cmd.extend(b'$%d\r\n' % len(_arg))
 		cmd.extend(b'%s\r\n' % _arg)

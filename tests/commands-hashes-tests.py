@@ -3,6 +3,18 @@ import pytest
 pytestmark = [pytest.mark.asyncio]
 
 
+async def test_hdel(redical):
+	await redical.hset('mykey', field1='foo', field2='bar', field3='baz')
+	assert 2 == await redical.hdel('mykey', 'field1', 'field3', 'notafield')
+
+
+async def test_hdel_typeerror(redical):
+	"""raises a TypeError for WRONGTYPE"""
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
+		await redical.hdel('mykey', 'field')
+
+
 async def test_hgetall(redical):
 	expected = dict(foo='bar', bar='baz', baz='foo')
 	assert 3 == await redical.hset('mykey', **expected)
