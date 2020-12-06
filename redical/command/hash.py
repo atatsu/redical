@@ -12,6 +12,7 @@ def _hset_error_wrapper(exc: Exception) -> Exception:
 
 
 _hdel_error_wrapper = _hset_error_wrapper
+_hget_error_wrapper = _hset_error_wrapper
 _hmget_error_wrapper = _hset_error_wrapper
 _hgetall_error_wrapper = _hset_error_wrapper
 
@@ -31,13 +32,13 @@ class HashCommandsMixin:
 	"""
 	Implemented commands:
 		* hdel
+		* hget
 		* hgetall
 		* hmget
 		* hset
 
 	TODO:
 		* hexists
-		* hget
 		* hincrby
 		* hincrbyfloat
 		* hkeys
@@ -64,6 +65,22 @@ class HashCommandsMixin:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
 		return self.execute('HDEL', key, *fields, error_func=_hdel_error_wrapper, **kwargs)
+
+	def hget(self: Executable, key: str, field: str, **kwargs: Any) -> Awaitable[Any]:
+		"""
+		Returns the value associated with `field` in the hash stored at `key`.
+
+		Args:
+			key: Name of the hash key to retrieve field value from.
+			field: Name of the field to retrieve value.
+
+		Returns: The value associated with `field`, or `None` when field is not
+			present in the hash or `key` does not exist.
+
+		Raises:
+			TypeError: If the supplied `key` doesn't contain a hash.
+		"""
+		return self.execute('HGET', key, field, error_func=_hget_error_wrapper, **kwargs)
 
 	def hgetall(self: Executable, key: str, **kwargs: Any) -> Awaitable[Dict[str, Any]]:
 		"""

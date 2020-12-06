@@ -15,6 +15,23 @@ async def test_hdel_typeerror(redical):
 		await redical.hdel('mykey', 'field')
 
 
+async def test_hget(redical):
+	assert 1 == await redical.hset('mykey', myfield='foo')
+	actual = await redical.hget('mykey', 'myfield')
+	assert 'foo' == actual
+	actual = await redical.hget('notakey', 'myfield')
+	assert None is actual
+
+
+async def test_hget_typeerror(redical):
+	"""
+	raise a TypeError for WRONGTYPE
+	"""
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
+		await redical.hget('mykey', 'myfield')
+
+
 async def test_hgetall(redical):
 	expected = dict(foo='bar', bar='baz', baz='foo')
 	assert 3 == await redical.hset('mykey', **expected)
