@@ -1,8 +1,12 @@
 from functools import partial
-from typing import Any, Awaitable
+from typing import overload, Any, Awaitable, Callable, List, TypeVar
 
+from ..abstract import TransformFunc
 from ..exception import InvalidKeyError, NoExpiryError
 from ..mixin import Executable
+from ..util import collect_transforms
+
+T = TypeVar('T')
 
 
 def _expire_convert_to_bool(response: int) -> bool:
@@ -75,7 +79,15 @@ class KeyCommandsMixin:
 		"""
 		return self.execute('EXISTS', *keys, **kwargs)
 
-	def expire(self: Executable, key: str, /, timeout: int, **kwargs: Any) -> Awaitable[bool]:
+	@overload
+	def expire(self: Executable, key: str, /, timeout: int, transform: None = None, **kwargs: Any) -> Awaitable[bool]:
+		...
+	@overload  # noqa: E301
+	def expire(
+		self: Executable, key: str, /, timeout: int, transform: Callable[[bool], T], **kwargs: Any
+	) -> Awaitable[T]:
+		...
+	def expire(self, key, /, timeout, **kwargs):  # noqa: E301
 		"""
 		Set a timeout on `key` in seconds.
 
@@ -86,9 +98,17 @@ class KeyCommandsMixin:
 		Returns:
 			True if the timeout was set, False if `key` does not exist.
 		"""
-		return self.execute('EXPIRE', key, int(timeout), conversion_func=_expire_convert_to_bool, **kwargs)
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(_expire_convert_to_bool, kwargs)
+		return self.execute('EXPIRE', key, int(timeout), transform=transforms, **kwargs)
 
-	def pttl(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
+	@overload
+	def pttl(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def pttl(self: Executable, key: str, /, transform: Callable[[int], T], **kwargs: Any) -> Awaitable[T]:
+		...
+	def pttl(self, key, /, **kwargs):  # noqa: E301
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in milliseconds.
 
@@ -102,9 +122,17 @@ class KeyCommandsMixin:
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return self.execute('PTTL', key, conversion_func=partial(_pttl_error_wrapper, key=key), **kwargs)
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(partial(_pttl_error_wrapper, key=key), kwargs)
+		return self.execute('PTTL', key, transform=transforms, **kwargs)
 
-	def ttl(self: Executable, key: str, **kwargs: Any) -> Awaitable[int]:
+	@overload
+	def ttl(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def ttl(self: Executable, key: str, /, transform: Callable[[int], T], **kwargs: Any) -> Awaitable[T]:
+		...
+	def ttl(self, key, /, **kwargs):  # noqa: E301
 		"""
 		Returns the remaining time to live of a key that has been set to expire, in seconds.
 
@@ -118,4 +146,6 @@ class KeyCommandsMixin:
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		return self.execute('TTL', key, conversion_func=partial(_ttl_error_wrapper, key=key), **kwargs)
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(partial(_ttl_error_wrapper, key=key), kwargs)
+		return self.execute('TTL', key, transform=transforms, **kwargs)

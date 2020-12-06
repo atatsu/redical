@@ -1,8 +1,11 @@
 from functools import partial
-from typing import Any, Awaitable, Dict, List, Sequence
+from typing import overload, Any, Awaitable, Callable, Dict, List, Sequence, TypeVar
 
+from ..abstract import TransformFunc
 from ..mixin import Executable
-from ..util import undefined
+from ..util import collect_transforms, undefined
+
+T = TypeVar('T')
 
 
 def _hset_error_wrapper(exc: Exception) -> Exception:
@@ -66,7 +69,7 @@ class HashCommandsMixin:
 		"""
 		return self.execute('HDEL', key, *fields, error_func=_hdel_error_wrapper, **kwargs)
 
-	def hget(self: Executable, key: str, field: str, **kwargs: Any) -> Awaitable[Any]:
+	def hget(self: Executable, key: str, /, field: str, **kwargs: Any) -> Awaitable[Any]:
 		"""
 		Returns the value associated with `field` in the hash stored at `key`.
 
@@ -82,7 +85,15 @@ class HashCommandsMixin:
 		"""
 		return self.execute('HGET', key, field, error_func=_hget_error_wrapper, **kwargs)
 
-	def hgetall(self: Executable, key: str, **kwargs: Any) -> Awaitable[Dict[str, Any]]:
+	@overload
+	def hgetall(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[Dict[str, Any]]:
+		...
+	@overload  # noqa: E301
+	def hgetall(
+		self: Executable, key: str, /, transform: Callable[[Dict[str, Any]], T], **kwargs: Any
+	) -> Awaitable[T]:
+		...
+	def hgetall(self, key, /, **kwargs):  # noqa: E301
 		"""
 		Returns all fields and values of the hash stored at `key`.
 
@@ -95,11 +106,23 @@ class HashCommandsMixin:
 		Raises:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(_hgetall_convert_to_dict, kwargs)
 		return self.execute(
-			'HGETALL', key, conversion_func=_hgetall_convert_to_dict, error_func=_hgetall_error_wrapper, **kwargs
+			'HGETALL', key, error_func=_hgetall_error_wrapper, transform=transforms, **kwargs
 		)
 
-	def hmget(self: Executable, key: str, /, *fields: str, **kwargs: Any) -> Awaitable[Dict[str, Any]]:
+	@overload
+	def hmget(
+		self: Executable, key: str, /, *fields: str, transform: None = None, **kwargs: Any
+	) -> Awaitable[Dict[str, Any]]:
+		...
+	@overload  # noqa: E301
+	def hmget(
+		self: Executable, key: str, /, *fields: str, transform: Callable[[Dict[str, Any]], T], **kwargs: Any
+	) -> Awaitable[T]:
+		...
+	def hmget(self, key, /, *fields, **kwargs):  # noqa: E301
 		"""
 		Returns the values associated with the specified `fields` in the hash stored at `key`.
 		For every field that does not exist in the hash a `None` value is returned.
@@ -116,11 +139,13 @@ class HashCommandsMixin:
 		Raises:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(partial(_hmget_convert_to_dict, fields=fields))
 		return self.execute(
 			'HMGET',
 			key,
 			*fields,
-			conversion_func=partial(_hmget_convert_to_dict, fields=fields),
+			transform=transforms,
 			error_func=_hmget_error_wrapper,
 			**kwargs
 		)
@@ -150,9 +175,7 @@ class HashCommandsMixin:
 			ValueError: Wrong number of arguments for `field_value_pairs` (unequal field count
 				versus value count).
 		"""
-		conversion_func: Any = kwargs.pop('conversion_func', None)
 		encoding: Any = kwargs.pop('encoding', undefined)
-
 		command: List[Any] = ['HSET', key]
 		x: Any
 		y: Any
@@ -162,5 +185,5 @@ class HashCommandsMixin:
 			raise ValueError('Number of supplied fields does not match the number of supplied values')
 		command.extend(flattened)
 		return self.execute(
-			*command, conversion_func=conversion_func, encoding=encoding, error_func=_hset_error_wrapper
+			*command, encoding=encoding, error_func=_hset_error_wrapper
 		)

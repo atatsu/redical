@@ -45,6 +45,14 @@ async def test_hgetall_typeerror(redical):
 		await redical.hgetall('mykey')
 
 
+async def test_hgetall_conversions(redical):
+	"""make sure multiple conversions work"""
+	expected = dict(foo='bar', bar='baz', baz='foo')
+	assert 3 == await redical.hset('mykey', **expected)
+	actual = await redical.hgetall('mykey', transform=lambda d: list(d.items()))
+	assert list(expected.items()) == actual
+
+
 async def test_hmget(redical):
 	expected = dict(foo='bar', bar='baz', baz='foo')
 	assert 3 == await redical.hset('mykey', **expected)

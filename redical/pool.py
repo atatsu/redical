@@ -21,7 +21,7 @@ from typing import (
 	Union,
 )
 
-from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
+from .abstract import AbstractParser, ErrorFunc, RedicalResource, Transform
 from .connection import create_connection, undefined, Connection
 from .exception import PoolClosedError, PoolClosingError, ResponseError
 
@@ -191,9 +191,9 @@ class ConnectionPool(RedicalResource):
 		self,
 		command: AnyStr,
 		*args: Any,
-		conversion_func: Optional[ConversionFunc] = None,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
-		error_func: Optional[ErrorFunc] = None
+		error_func: Optional[ErrorFunc] = None,
+		transform: Optional[Transform] = None
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise PoolClosedError()
@@ -203,7 +203,7 @@ class ConnectionPool(RedicalResource):
 		conn: Connection = await self._acquire_unused_connection()
 		try:
 			return await conn.execute(
-				command, *args, conversion_func=conversion_func, encoding=encoding, error_func=error_func
+				command, *args, encoding=encoding, error_func=error_func, transform=transform
 			)
 		except ResponseError:
 			LOG.exception(f'Unhandled exception while executing command: {command!r}, args: {args}')

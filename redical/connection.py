@@ -27,7 +27,7 @@ from urllib.parse import unquote
 
 from yarl import URL
 
-from .abstract import AbstractParser, ConversionFunc, ErrorFunc, RedicalResource
+from .abstract import AbstractParser, ErrorFunc, RedicalResource, Transform, TransformFunc
 from .exception import (
 	AbortTransaction,
 	ConnectionClosedError,
@@ -38,7 +38,7 @@ from .exception import (
 	WatchError,
 )
 from .parser import Parser
-from .util import undefined
+from .util import collect_transforms, undefined
 
 if TYPE_CHECKING:
 	from asyncio import Future, StreamReader, StreamWriter, Task
@@ -57,8 +57,8 @@ class Address(NamedTuple):
 class Resolver:
 	encoding: str
 	future: 'Future'
-	conversion_func: Optional[ConversionFunc] = None
 	error_func: Optional[ErrorFunc] = None
+	transform: Optional[Transform] = None
 
 
 # TODO: SSL
@@ -165,22 +165,23 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 	return cmd
 
 
-def _decode(parsed: Any, encoding: str, conversion_func: Optional[ConversionFunc] = None) -> Any:
+def _decode(parsed: Any, encoding: str, transform: Optional[Transform] = None) -> Any:
+	transforms: List[TransformFunc]
+	transforms, _ = collect_transforms(transform)
+
+	result: Any = parsed
 	if isinstance(parsed, bytes):
 		decoded: str = parsed.decode(encoding)
-		if callable(conversion_func):
-			return conversion_func(decoded)
-		return decoded
+		result = decoded
 	elif isinstance(parsed, list):
 		x: Any
 		decoded_members: List[Any] = [_decode(x, encoding) for x in parsed]
-		if callable(conversion_func):
-			return conversion_func(decoded_members)
-		return decoded_members
+		result = decoded_members
 
-	if callable(conversion_func):
-		return conversion_func(parsed)
-	return parsed
+	for func in transforms:
+		result = func(result)
+
+	return result
 
 
 if TYPE_CHECKING:
@@ -318,9 +319,9 @@ class Connection(RedicalResource):
 		self,
 		command: AnyStr,
 		*args: Any,
-		conversion_func: Optional[ConversionFunc] = None,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
 		error_func: Optional[ErrorFunc] = None,
+		transform: Optional[Transform] = None
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise ConnectionClosedError()
@@ -345,7 +346,7 @@ class Connection(RedicalResource):
 		if self._in_pipeline:
 			future = PipelineFutureWrapper(future)
 		self._resolvers.append(
-			Resolver(encoding=_encoding, future=future, conversion_func=conversion_func, error_func=error_func)
+			Resolver(encoding=_encoding, future=future, transform=transform, error_func=error_func)
 		)
 		return future
 
@@ -427,7 +428,7 @@ class Connection(RedicalResource):
 									error = resolver.error_func(error)
 								resolver.future.set_exception(error)
 								continue
-							decoded: Any = _decode(parsed, resolver.encoding, resolver.conversion_func)
+							decoded: Any = _decode(parsed, resolver.encoding, resolver.transform)
 							LOG.debug(f'decoded response: {decoded}')
 							resolver.future.set_result(decoded)
 						except Exception as ex:
@@ -497,7 +498,7 @@ class Connection(RedicalResource):
 			future: 'Future' = PipelineFutureWrapper(asyncio.get_running_loop().create_future())
 			self._resolvers.insert(
 				0,
-				Resolver(encoding=self._encoding, future=future, conversion_func=None, error_func=None)
+				Resolver(encoding=self._encoding, future=future, transform=None, error_func=None)
 			)
 			# The `EXEC` commaned is replied to with (if the transaction was executed) an array
 			# of all replies for all commands executed in the EXEC block. Since it doesn't have

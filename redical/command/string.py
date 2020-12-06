@@ -1,8 +1,12 @@
 from functools import partial
-from typing import Any, AnyStr, Awaitable, List, Optional, Union
+from typing import overload, Any, AnyStr, Awaitable, Callable, List, Optional, TypeVar, Union
 
+from ..abstract import TransformFunc
 from ..exception import InvalidKeyError
 from ..mixin import Executable
+from ..util import collect_transforms
+
+T = TypeVar('T')
 
 
 def _set_convert_to_bool(response: Optional[str]) -> bool:
@@ -44,7 +48,13 @@ class StringCommandsMixin:
 		* stralgo
 		* strlen
 	"""
-	def get(self: Executable, key: str, /, **kwargs: Any) -> Awaitable[str]:
+	@overload
+	def get(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[str]:
+		...
+	@overload  # noqa: E301
+	def get(self: Executable, key: str, /, transform: Callable[[str], T], **kwargs: Any) -> Awaitable[T]:
+		...
+	def get(self, key, /, **kwargs):  # noqa: E301
 		"""
 		Retrieve the value of a key.
 
@@ -57,7 +67,9 @@ class StringCommandsMixin:
 		Raises:
 			InvalidKeyError: If the supplied `key` does not exist.
 		"""
-		return self.execute('GET', key, conversion_func=partial(_get_error_wrapper, key=key), **kwargs)
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(partial(_get_error_wrapper, key=key), kwargs)
+		return self.execute('GET', key, transform=transforms, **kwargs)
 
 	def incr(self: Executable, key: str, /, **kwargs: Any) -> Awaitable[int]:
 		"""
@@ -71,6 +83,7 @@ class StringCommandsMixin:
 		"""
 		return self.execute('INCR', key, **kwargs)
 
+	@overload
 	def set(
 		self: Executable,
 		key: str,
@@ -82,8 +95,31 @@ class StringCommandsMixin:
 		only_if_exists: bool = False,
 		only_if_not_exists: bool = False,
 		keep_ttl: bool = False,
+		transform: None = None,
 		**kwargs: Any
 	) -> Awaitable[bool]:
+		...
+	@overload  # noqa: E301
+	def set(
+		self: Executable,
+		key: str,
+		/,
+		value: AnyStr,
+		*,
+		expire_in_seconds: Optional[Union[int, float]] = None,
+		expire_in_milliseconds: Optional[int] = None,
+		only_if_exists: bool = False,
+		only_if_not_exists: bool = False,
+		keep_ttl: bool = False,
+		transform: Callable[[bool], T],
+		**kwargs: Any
+	) -> Awaitable[T]:
+		...
+	def set(  # noqa: E301
+		self, key, /, value, *,
+		expire_in_seconds=None, expire_in_milliseconds=None, only_if_exists=False, only_if_not_exists=False,
+		keep_ttl=False, **kwargs
+	):
 		"""
 		Set `key` to hold the string `value`. If `key` already holds a value it is overwritten,
 		regardless of its type. Any previous time to live associated with the key is discarded.
@@ -129,4 +165,6 @@ class StringCommandsMixin:
 		if bool(keep_ttl):
 			additional_args.append('KEEPTTL')
 
-		return self.execute('SET', key, value, *additional_args, conversion_func=_set_convert_to_bool, **kwargs)
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(_set_convert_to_bool, kwargs)
+		return self.execute('SET', key, value, *additional_args, transform=transforms, **kwargs)
