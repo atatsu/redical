@@ -96,7 +96,7 @@ class Redical(
 		self._resource.close()
 
 	@asynccontextmanager
-	async def transaction(self, *watch_keys: str) -> AsyncIterator[R]:
+	async def transaction(self: R, *watch_keys: str) -> AsyncIterator[R]:
 		conn: RedicalResource
 		async with self._resource.transaction(*watch_keys) as conn:
 			T: Type[R] = type('Transaction', (Transaction, self.__class__), {})
@@ -105,7 +105,7 @@ class Redical(
 	async def wait_closed(self) -> None:
 		await self._resource.wait_closed()
 
-	async def __aenter__(self) -> R:
+	async def __aenter__(self: R) -> R:
 		conn: Connection = cast(Connection, await self._resource.__aenter__())
 		P: Type[R] = type('Pipeline', (Pipeline, self.__class__), {})
 		return P(conn)

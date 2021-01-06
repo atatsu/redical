@@ -89,6 +89,7 @@ async def create_connection(
 		url: URL = URL(address_or_uri)
 		scheme = url.scheme
 		if scheme in ('redis', 'rediss'):
+			# FIXME: `url.port` can be `None`
 			host = str(url.host)
 			port = int(str(url.port))
 			address = Address(host, port)

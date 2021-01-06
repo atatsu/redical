@@ -1,4 +1,19 @@
-from typing import overload, Any, AnyStr, Awaitable, Callable, List, Set, Sequence, TypeVar
+from dataclasses import dataclass
+from typing import (
+	overload,
+	Any,
+	AnyStr,
+	AsyncIterator,
+	Awaitable,
+	Callable,
+	List,
+	Optional,
+	Set,
+	Sequence,
+	TypeVar,
+	Tuple,
+	Union,
+)
 
 from ..abstract import TransformFunc
 from ..mixin import Executable
@@ -7,8 +22,18 @@ from ..util import collect_transforms
 T = TypeVar('T')
 
 
+@dataclass
+class SscanResponse:
+	cursor: str
+	elements: Set[str]
+
+
 def _smembers_convert_to_set(response: Sequence[Any]) -> Set[Any]:
 	return set(response)
+
+
+def _sscan_convert_to_results(response: Tuple[str, Sequence[str]]) -> SscanResponse:
+	return SscanResponse(cursor=response[0], elements=set(response[1]))
 
 
 class SetCommandsMixin:
@@ -17,6 +42,7 @@ class SetCommandsMixin:
 		* sismember
 		* smembers
 		* srem
+		* sscan
 
 	TODO:
 		* sadd
@@ -30,7 +56,6 @@ class SetCommandsMixin:
 		* srandmember
 		* sunion
 		* sunionstore
-		* sscan
 	"""
 	@overload
 	def sadd(self: Executable, key: str, *members: Any, transform: None = None, **kwargs: Any) -> Awaitable[int]:
@@ -103,7 +128,7 @@ class SetCommandsMixin:
 
 	def srem(self: Executable, key: str, *members: AnyStr, **kwargs: Any) -> Awaitable[int]:
 		"""
-		Remove the specified members from teh set stored at `key`.
+		Remove the specified members from the set stored at `key`.
 
 		Args:
 			key: Name of the key set is stored at.
@@ -114,3 +139,71 @@ class SetCommandsMixin:
 				non-existing members.
 		"""
 		return self.execute('SREM', key, *members, **kwargs)
+
+	def sscan(
+		self: Executable,
+		key: str,
+		cursor: Union[int, str],
+		*,
+		match: Optional[str] = None,
+		count: Optional[int] = None,
+		**kwargs: Any
+	) -> Awaitable[SscanResponse]:
+		"""
+		Incrementally iterate over the elements of the set stored at `key`.
+
+		Args:
+			key: Name of the key set is stored at.
+			cursor:
+			match: Return only those elements that match the supplied glob-style pattern.
+			count: Number of elements that should be returned with each call to the server.
+				Please note that this is **just a hint** to the server, but is generally
+				what can be epxected most times.
+
+		Returns:
+			A `SscanResponse` instance which contains the cursor returned by the server as well
+			as a `set` of elements.
+		"""
+		elements: List[str]
+		match_args: List[str] = []
+		count_args: List[str] = []
+		if match is not None:
+			match_args.extend([
+				'MATCH',
+				str(match),
+			])
+		if count is not None:
+			count_args.extend([
+				'COUNT',
+				str(count),
+			])
+		transforms: List[TransformFunc]
+		transforms, kwargs = collect_transforms(_sscan_convert_to_results, kwargs)
+		return self.execute('SSCAN', key, cursor, *match_args, *count_args, transform=transforms, **kwargs)
+
+	async def sscan_iter(
+		self, key: str, *, match: Optional[str] = None, count: Optional[int] = None, **kwargs: Any
+	) -> AsyncIterator[str]:
+		"""
+		Like `sscan` but instead iterates over the entire set until the iterator is exhausted.
+		The cursor returned by the server is managed internally and additional `SSCAN` calls
+		are made until there are no elements left to return.
+
+		Note: This method is **not** suitable for pipeline or transaction use.
+
+		Args:
+			key: Name of the key set is stored at.
+			match: Return only those elements that match the supplied glob-style pattern.
+			count: Number of elements that should be returned with each call to the server.
+				Please note that this is **just a hint** to the server, but is generally
+				what can be epxected most times.
+
+		Returns:
+			An asynchronous iterator that exhausts all elements.
+		"""
+		cursor: Optional[str] = None
+		while cursor != "0":
+			response: SscanResponse = await self.sscan(key, cursor or 0, match=match, count=count, **kwargs)  # type: ignore
+			cursor = response.cursor
+			for element in response.elements:
+				yield element
