@@ -140,7 +140,7 @@ class HashCommandsMixin:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
 		transforms: List[TransformFunc]
-		transforms, kwargs = collect_transforms(partial(_hmget_convert_to_dict, fields=fields))
+		transforms, kwargs = collect_transforms(partial(_hmget_convert_to_dict, fields=fields), kwargs)
 		return self.execute(
 			'HMGET',
 			key,

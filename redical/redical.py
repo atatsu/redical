@@ -97,6 +97,9 @@ class Redical(
 
 	@asynccontextmanager
 	async def transaction(self: R, *watch_keys: str) -> AsyncIterator[R]:
+		# TODO: Add a very important note that if the number of active transactions
+		#       exceeds the connection pool size it'll block!! Maybe raise an error?
+		#       Probably.
 		conn: RedicalResource
 		async with self._resource.transaction(*watch_keys) as conn:
 			T: Type[R] = type('Transaction', (Transaction, self.__class__), {})

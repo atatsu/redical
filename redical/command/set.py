@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import (
 	overload,
 	Any,
-	AnyStr,
 	AsyncIterator,
 	Awaitable,
 	Callable,
@@ -126,7 +125,7 @@ class SetCommandsMixin:
 		transforms, kwargs = collect_transforms(_smembers_convert_to_set, kwargs)
 		return self.execute('SMEMBERS', key, transform=transforms, **kwargs)
 
-	def srem(self: Executable, key: str, *members: AnyStr, **kwargs: Any) -> Awaitable[int]:
+	def srem(self: Executable, key: str, *members: Any, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Remove the specified members from the set stored at `key`.
 

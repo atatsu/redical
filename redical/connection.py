@@ -298,7 +298,7 @@ class Connection(RedicalResource):
 		self._pipeline_buffer = bytearray()
 		self._reader = reader
 		self._read_data_cancel_event = asyncio.Event()
-		self._read_data_task = asyncio.create_task(self._read_data())
+		self._read_data_task = asyncio.create_task(self._read_data(), name=f'{self}._read_data')
 		self._read_data_task.add_done_callback(self._set_read_state)
 		self._resolvers = deque()
 		self._timeout = float(timeout)
