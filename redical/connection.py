@@ -55,7 +55,7 @@ class Address(NamedTuple):
 
 @dataclass
 class Resolver:
-	encoding: str
+	encoding: Optional[str]
 	future: 'Future'
 	error_func: Optional[ErrorFunc] = None
 	transform: Optional[Transform] = None
@@ -166,12 +166,12 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 	return cmd
 
 
-def _decode(parsed: Any, encoding: str, transform: Optional[Transform] = None) -> Any:
+def _decode(parsed: Any, encoding: Optional[str], transform: Optional[Transform] = None) -> Any:
 	transforms: List[TransformFunc]
 	transforms, _ = collect_transforms(transform)
 
 	result: Any = parsed
-	if isinstance(parsed, bytes):
+	if isinstance(parsed, bytes) and encoding is not None:
 		decoded: str = parsed.decode(encoding)
 		result = decoded
 	elif isinstance(parsed, list):
@@ -329,11 +329,13 @@ class Connection(RedicalResource):
 		if self.is_closing:
 			raise ConnectionClosingError()
 
-		_encoding: Optional[str]
+		_encoding: Optional[str] = None
 		if encoding is undefined:
 			_encoding = self._encoding
-		else:
-			_encoding = 'utf-8' if encoding is None else str(encoding)
+		elif encoding is not undefined and encoding is not None:
+			_encoding = str(encoding)
+		# else:
+		#   _encoding = 'utf-8' if encoding is None else str(encoding)
 
 		cmd: bytes = _build_command(command, *args)
 		if not self._in_pipeline:

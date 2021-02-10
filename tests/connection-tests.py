@@ -271,7 +271,7 @@ async def test_execute_encoding_conn_override(redis_uri):
 	conn = await create_connection(redis_uri, encoding='iso2022_kr')
 	await conn.execute('flushdb')
 	await conn.execute('set', 'mykey', '훈민정음')
-	assert '훈민정음' == await conn.execute('get', 'mykey', encoding=None)
+	assert '훈민정음' == await conn.execute('get', 'mykey', encoding='utf-8')
 	conn.close()
 	await conn.wait_closed()
 
