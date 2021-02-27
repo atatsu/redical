@@ -9,7 +9,6 @@ from types import TracebackType
 from typing import (
 	cast,
 	Any,
-	AnyStr,
 	AsyncIterator,
 	Awaitable,
 	Deque,
@@ -27,7 +26,7 @@ from urllib.parse import unquote
 
 from yarl import URL
 
-from .abstract import AbstractParser, ErrorFunc, RedicalResource, Transform, TransformFunc
+from .abstract import AbstractParser, RedicalResource
 from .exception import (
 	AbortTransaction,
 	ConnectionClosedError,
@@ -38,7 +37,8 @@ from .exception import (
 	WatchError,
 )
 from .parser import Parser
-from .util import collect_transforms, undefined
+from .type import undefined, CommandType, ErrorFuncType, TransformFuncType, TransformType
+from .util import collect_transforms
 
 if TYPE_CHECKING:
 	from asyncio import Future, StreamReader, StreamWriter, Task
@@ -57,8 +57,8 @@ class Address(NamedTuple):
 class Resolver:
 	encoding: Optional[str]
 	future: 'Future'
-	error_func: Optional[ErrorFunc] = None
-	transform: Optional[Transform] = None
+	error_func: Optional[ErrorFuncType] = None
+	transform: Optional[TransformType] = None
 
 
 # TODO: SSL
@@ -131,7 +131,7 @@ async def create_connection(
 	return conn
 
 
-def _build_command(command: AnyStr, *args: Any) -> bytes:
+def _build_command(command: CommandType, *args: Any) -> bytes:
 	"""
 	Serializes a command and its arguments via RESP (https://redis.io/topics/protocol).
 	"""
@@ -166,8 +166,8 @@ def _build_command(command: AnyStr, *args: Any) -> bytes:
 	return cmd
 
 
-def _decode(parsed: Any, encoding: Optional[str], transform: Optional[Transform] = None) -> Any:
-	transforms: List[TransformFunc]
+def _decode(parsed: Any, encoding: Optional[str], transform: Optional[TransformType] = None) -> Any:
+	transforms: List[TransformFuncType]
 	transforms, _ = collect_transforms(transform)
 
 	result: Any = parsed
@@ -318,11 +318,11 @@ class Connection(RedicalResource):
 
 	def execute(
 		self,
-		command: AnyStr,
+		command: CommandType,
 		*args: Any,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
-		error_func: Optional[ErrorFunc] = None,
-		transform: Optional[Transform] = None
+		error_func: Optional[ErrorFuncType] = None,
+		transform: Optional[TransformType] = None
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise ConnectionClosedError()

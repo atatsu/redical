@@ -26,6 +26,7 @@ from .command import (
 	HashCommandsMixin,
 	ServerCommandsMixin,
 	SetCommandsMixin,
+	SortedSetCommandsMixin,
 	StringCommandsMixin,
 )
 from .connection import create_connection, Connection
@@ -82,6 +83,7 @@ class Redical(
 	HashCommandsMixin,
 	ServerCommandsMixin,
 	SetCommandsMixin,
+	SortedSetCommandsMixin,
 	StringCommandsMixin
 ):
 	@property

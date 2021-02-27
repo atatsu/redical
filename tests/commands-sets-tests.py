@@ -1,4 +1,4 @@
-import pytest  # type: ignore
+import pytest
 
 from redical.command.set import SscanResponse
 

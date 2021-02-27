@@ -26,7 +26,7 @@ services:
 
   redis:
     container_name: redical-redis
-    image: redis:latest
+    image: redis:6.2-alpine
     ports:
       - ${REDICAL_REDIS_PORT:-6379}:6379
     volumes:

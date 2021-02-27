@@ -14,8 +14,8 @@ from typing import (
 	Union,
 )
 
-from ..abstract import TransformFunc
 from ..mixin import Executable
+from ..type import TransformFuncType
 from ..util import collect_transforms
 
 T = TypeVar('T')
@@ -60,7 +60,7 @@ class SetCommandsMixin:
 	def sadd(self: Executable, key: str, *members: Any, transform: None = None, **kwargs: Any) -> Awaitable[int]:
 		...
 	@overload  # noqa: E301
-	def sadd(self: Executable, key: str, *members: Any, transform: Callable[[int], T]) -> Awaitable[T]:
+	def sadd(self: Executable, key: str, *members: Any, transform: Callable[[int], T], **kwargs: Any) -> Awaitable[T]:
 		...
 	def sadd(self, key, *members, **kwargs):  # noqa: E301
 		"""
@@ -76,7 +76,7 @@ class SetCommandsMixin:
 			The number of members that were added to the set, not including all the members
 				already present in the set.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(int, kwargs)
 		return self.execute('SADD', key, *members, transform=transforms, **kwargs)
 
@@ -101,7 +101,7 @@ class SetCommandsMixin:
 		Returns:
 			True if `member` is in the set, False otherwise.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(bool, kwargs)
 		return self.execute('SISMEMBER', key, member, transform=transforms, **kwargs)
 
@@ -109,7 +109,7 @@ class SetCommandsMixin:
 	def smembers(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[Set[str]]:
 		...
 	@overload  # noqa: E301
-	def smembers(self: Executable, key: str, /, transform: Callable[[Set[str]], T]) -> Awaitable[T]:
+	def smembers(self: Executable, key: str, /, transform: Callable[[Set[str]], T], **kwargs: Any) -> Awaitable[T]:
 		...
 	def smembers(self, key, /, **kwargs):  # noqa: E301
 		"""
@@ -121,7 +121,7 @@ class SetCommandsMixin:
 		Returns:
 			All elements of the set.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(_smembers_convert_to_set, kwargs)
 		return self.execute('SMEMBERS', key, transform=transforms, **kwargs)
 
@@ -176,7 +176,7 @@ class SetCommandsMixin:
 				'COUNT',
 				str(count),
 			])
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(_sscan_convert_to_results, kwargs)
 		return self.execute('SSCAN', key, cursor, *match_args, *count_args, transform=transforms, **kwargs)
 

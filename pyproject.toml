@@ -10,8 +10,8 @@ python = "^3.8"
 yarl = "^1.5.1"
 
 [tool.poetry.dev-dependencies]
-pytest = "^5.2"
-mypy = "^0.782"
+pytest = "^6.2.1"
+mypy = "^0.800"
 flake8 = "^3.8.3"
 pytest-watch = "^4.2.0"
 pytest-asyncio = "^0.14.0"

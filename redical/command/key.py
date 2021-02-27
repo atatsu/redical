@@ -1,9 +1,9 @@
 from functools import partial
 from typing import overload, Any, Awaitable, Callable, List, TypeVar
 
-from ..abstract import TransformFunc
 from ..exception import InvalidKeyError, NoExpiryError
 from ..mixin import Executable
+from ..type import TransformFuncType
 from ..util import collect_transforms
 
 T = TypeVar('T')
@@ -98,7 +98,7 @@ class KeyCommandsMixin:
 		Returns:
 			True if the timeout was set, False if `key` does not exist.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(_expire_convert_to_bool, kwargs)
 		return self.execute('EXPIRE', key, int(timeout), transform=transforms, **kwargs)
 
@@ -122,7 +122,7 @@ class KeyCommandsMixin:
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(partial(_pttl_error_wrapper, key=key), kwargs)
 		return self.execute('PTTL', key, transform=transforms, **kwargs)
 
@@ -146,6 +146,6 @@ class KeyCommandsMixin:
 			InvalidKeyError: If the supplied `key` does not exist.
 			NoExpiryError: If the supplied `key` exists but has no associated expiry.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(partial(_ttl_error_wrapper, key=key), kwargs)
 		return self.execute('TTL', key, transform=transforms, **kwargs)

@@ -1,9 +1,9 @@
 from functools import partial
 from typing import overload, Any, AnyStr, Awaitable, Callable, List, Optional, TypeVar, Union
 
-from ..abstract import TransformFunc
 from ..exception import InvalidKeyError
 from ..mixin import Executable
+from ..type import TransformFuncType
 from ..util import collect_transforms
 
 T = TypeVar('T')
@@ -67,7 +67,7 @@ class StringCommandsMixin:
 		Raises:
 			InvalidKeyError: If the supplied `key` does not exist.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(partial(_get_error_wrapper, key=key), kwargs)
 		return self.execute('GET', key, transform=transforms, **kwargs)
 
@@ -83,6 +83,10 @@ class StringCommandsMixin:
 		"""
 		return self.execute('INCR', key, **kwargs)
 
+	# FIXME: `only_if_exists` and `only_if_not_exists` should be replaced with `const.UpdatePolicy`
+	# TODO: Add support for `GET` option
+	# TODO: Add support for `EXAT` option
+	# TODO: Add support for `PXAT` option
 	@overload
 	def set(
 		self: Executable,
@@ -131,8 +135,8 @@ class StringCommandsMixin:
 				is used it will be multiplied by 1000, coerced to an int, and be applied as milliseconds.
 				Defaults to None.
 			expire_in_milliseconds: Instruct `key` to expire in the specified milliseconds. Defaults to None.
-			only_if_exists: Only set the `key` if it does not already exist. Defaults to False.
-			only_if_not_exists: Only set the `key` if it already exists. Defaults to False.
+			only_if_exists: Only set the `key` if it already exists. Defaults to `False`.
+			only_if_not_exists: Only set the `key` if it does not already exist. Defaults to `False`.
 			keep_ttl: When setting `key`, retain the time to live associated with it if it was
 				previously set to expire. Defaults to False.
 
@@ -165,6 +169,6 @@ class StringCommandsMixin:
 		if bool(keep_ttl):
 			additional_args.append('KEEPTTL')
 
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(_set_convert_to_bool, kwargs)
 		return self.execute('SET', key, value, *additional_args, transform=transforms, **kwargs)

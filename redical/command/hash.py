@@ -1,9 +1,9 @@
 from functools import partial
 from typing import overload, Any, Awaitable, Callable, Dict, List, Sequence, TypeVar
 
-from ..abstract import TransformFunc
 from ..mixin import Executable
-from ..util import collect_transforms, undefined
+from ..type import undefined, TransformFuncType
+from ..util import collect_transforms
 
 T = TypeVar('T')
 
@@ -106,7 +106,7 @@ class HashCommandsMixin:
 		Raises:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(_hgetall_convert_to_dict, kwargs)
 		return self.execute(
 			'HGETALL', key, error_func=_hgetall_error_wrapper, transform=transforms, **kwargs
@@ -139,7 +139,7 @@ class HashCommandsMixin:
 		Raises:
 			TypeError: If the supplied `key` doesn't contain a hash.
 		"""
-		transforms: List[TransformFunc]
+		transforms: List[TransformFuncType]
 		transforms, kwargs = collect_transforms(partial(_hmget_convert_to_dict, fields=fields), kwargs)
 		return self.execute(
 			'HMGET',
@@ -150,6 +150,8 @@ class HashCommandsMixin:
 			**kwargs
 		)
 
+	# FIXME: This needs to pluck out all possible reserved `kwargs` so that they aren't included
+	#        in the command
 	def hset(
 		self: Executable, key: str, /, *field_value_pairs: Any, **kwargs: Any
 	) -> Awaitable[int]:

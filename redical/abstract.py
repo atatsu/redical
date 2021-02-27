@@ -3,13 +3,11 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, AnyStr, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, AnyStr, AsyncIterator, Awaitable, List, Optional, Tuple, Type
+
+from .type import CommandType, ErrorFuncType, TransformType
 
 __all__: List[str] = ['AbstractParser', 'RedicalResource']
-
-ErrorFunc = Callable[[Exception], Exception]
-TransformFunc = Callable[[Any], Any]
-Transform = Union[Sequence[TransformFunc], TransformFunc]
 
 
 class RedicalResource(ABC):
@@ -67,11 +65,11 @@ class RedicalResource(ABC):
 	@abstractmethod
 	def execute(
 		self,
-		command: AnyStr,
+		command: CommandType,
 		*args: Any,
-		encoding: str = 'utf-8',
-		error_func: Optional[ErrorFunc] = None,
-		transform: Optional[Transform] = None
+		encoding: Optional[str] = 'utf-8',
+		error_func: Optional[ErrorFuncType] = None,
+		transform: Optional[TransformType] = None
 	) -> Awaitable[Any]:
 		"""
 		Execute a Redis command through the underlying connection or pool.

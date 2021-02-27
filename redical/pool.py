@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import (
 	Any,
-	AnyStr,
 	AsyncIterator,
 	Awaitable,
 	Deque,
@@ -21,14 +20,15 @@ from typing import (
 	Union,
 )
 
-from .abstract import AbstractParser, ErrorFunc, RedicalResource, Transform
+from .abstract import AbstractParser, RedicalResource
 from .connection import create_connection, undefined, Connection
 from .exception import PoolClosedError, PoolClosingError, ResponseError
+from .type import CommandType, ErrorFuncType, TransformType
 
 LOG: Final[logging.Logger] = logging.getLogger(__name__)
 
 
-connection_ctx: contextvars.ContextVar = contextvars.ContextVar('connection')
+connection_ctx: contextvars.ContextVar[Connection] = contextvars.ContextVar('connection')
 
 
 async def create_pool(
@@ -189,11 +189,11 @@ class ConnectionPool(RedicalResource):
 
 	async def execute(
 		self,
-		command: AnyStr,
+		command: CommandType,
 		*args: Any,
 		encoding: Union[Type[undefined], Optional[str]] = undefined,
-		error_func: Optional[ErrorFunc] = None,
-		transform: Optional[Transform] = None
+		error_func: Optional[ErrorFuncType] = None,
+		transform: Optional[TransformType] = None
 	) -> Awaitable[Any]:
 		if self.is_closed:
 			raise PoolClosedError()
