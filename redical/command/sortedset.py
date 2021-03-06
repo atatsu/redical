@@ -49,6 +49,12 @@ def _zrange_index_convert_to_tuple(
 	])
 
 
+def _zscore_convert_to_float(score: Optional[str]) -> Optional[float]:
+	if score is None:
+		return None
+	return float(score)
+
+
 class ScorePolicy(str, Enum):
 	GREATER_THAN = 'GT'
 	LESS_THAN = 'LT'
@@ -315,12 +321,16 @@ class SortedSetCommandsMixin:
 	@overload
 	def zscore(
 		self: 'Executable', key: str, member: Any, encoding: Optional[str] = 'utf-8', transform: None = None
-	) -> Awaitable[float]:
+	) -> Awaitable[Optional[float]]:
 		...
 	@overload  # noqa: E301
 	def zscore(
-		self: 'Executable', key: str, member: Any, transform: Callable[[float], T], encoding: Optional[str] = 'utf-8'
-	) -> Awaitable[T]:
+		self: 'Executable',
+		key: str,
+		member: Any,
+		transform: Callable[[Optional[float]], T],
+		encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[Optional[T]]:
 		...
 	def zscore(self, key, member, **kwargs):  # noqa: E301
 		"""
@@ -337,5 +347,5 @@ class SortedSetCommandsMixin:
 		Raises:
 			TypeError: If the supplied `key` exists and is not a sorted set.
 		"""
-		transforms, kwargs = collect_transforms(float, kwargs)
+		transforms, kwargs = collect_transforms(_zscore_convert_to_float, kwargs)
 		return self.execute('ZSCORE', key, member, error_func=_zscore_error_wrapper, transform=transforms, **kwargs)

@@ -79,6 +79,15 @@ async def test_zscore(redical):
 	assert 5.5 == await redical.zscore('mykey', 'five')
 
 
+async def test_zscore_nonexistent_key(redical):
+	assert None is await redical.zscore('notakey', 'notamember')
+
+
+async def test_zscore_nonexistent_member(redical):
+	await redical.zadd('mykey', five=5)
+	assert None is await redical.zscore('mykey', 'notamember')
+
+
 async def test_zscore_invalid_key(redical):
 	assert True is await redical.set('mykey', 'foo')
 	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
