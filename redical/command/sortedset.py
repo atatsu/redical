@@ -30,8 +30,9 @@ def _zadd_error_wrapper(exc: Exception) -> Exception:
 	return exc
 
 
-_zscore_error_wrapper = _zadd_error_wrapper
+_zcard_error_wrapper = _zadd_error_wrapper
 _zrange_index_error_wrapper = _zadd_error_wrapper
+_zscore_error_wrapper = _zadd_error_wrapper
 _zrem_error_wrapper = _zadd_error_wrapper
 
 
@@ -77,12 +78,12 @@ class SortedSetCommandsMixin:
 	"""
 	Implemented commands:
 		* zadd
+		* zcard
 		* zrange[_index]
 		* zrem
 		* zscore
 
 	TODO:
-		* zcard
 		* zcount
 		* zdiff
 		* zdiffstore
@@ -198,6 +199,32 @@ class SortedSetCommandsMixin:
 			transform=transform,
 		)
 
+	@overload
+	def zcard(
+		self: 'Executable', key: str, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def zcard(
+		self: 'Executable', key: str, *, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
+		...
+	def zcard(self: 'Executable', key: str, **kwargs):  # noqa: E301
+		"""
+		Returns the cardinality (number of elements) of the sorted set stored at `key`.
+
+		Args:
+			key: Name of the key sorted set is stored at.
+
+		Returns:
+			The number of elements in the sorted set, or `0` if `key` does not exist.
+
+		Raises:
+			TypeError: If the supplied `key` exists and is not a sorted set.
+		"""
+		command: List[str] = ['ZCARD', key]
+		return self.execute(*command, error_func=_zcard_error_wrapper, **kwargs)
+
 	# def zrange(
 	#   self: 'Executable',
 	#   key: str,
@@ -300,6 +327,10 @@ class SortedSetCommandsMixin:
 		of the sorted set will be used.
 
 		Args:
+			key: Name of the key sorted set is stored at.
+			start: Index at which to start the range selection.
+			stop: Index at which to stop the range selection. Remember that the range is
+				**inclusive**, so the element at position `stop` will be included in the response.
 			reverse: If `True` elements will be ordered from the highest to lowest score.
 			with_scores: If `True` the response will be supplemented with the scores of the
 				elements returned. The response will be a list of `(<element>, <score>)` tuples.
@@ -357,7 +388,7 @@ class SortedSetCommandsMixin:
 
 	@overload
 	def zscore(
-		self: 'Executable', key: str, member: Any, encoding: Optional[str] = 'utf-8', transform: None = None
+		self: 'Executable', key: str, member: Any, *, encoding: Optional[str] = 'utf-8', transform: None = None
 	) -> Awaitable[Optional[float]]:
 		...
 	@overload  # noqa: E301
@@ -365,6 +396,7 @@ class SortedSetCommandsMixin:
 		self: 'Executable',
 		key: str,
 		member: Any,
+		*,
 		transform: Callable[[Optional[float]], T],
 		encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[Optional[T]]:

@@ -101,6 +101,16 @@ async def add(redical):
 	return values
 
 
+async def test_zcard(redical, add):
+	assert 6 == await redical.zcard('mykey')
+
+
+async def test_zcard_invalid_key(redical):
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
+		await redical.zcard('mykey')
+
+
 async def test_zrem(redical: Redical, add):
 	assert 2 == await redical.zrem('mykey', 'three', 'five')
 	assert None is await redical.zscore('mykey', 'three')
