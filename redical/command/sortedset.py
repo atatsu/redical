@@ -32,6 +32,7 @@ def _zadd_error_wrapper(exc: Exception) -> Exception:
 
 _zscore_error_wrapper = _zadd_error_wrapper
 _zrange_index_error_wrapper = _zadd_error_wrapper
+_zrem_error_wrapper = _zadd_error_wrapper
 
 
 class ElementScore(NamedTuple):
@@ -77,6 +78,7 @@ class SortedSetCommandsMixin:
 	Implemented commands:
 		* zadd
 		* zrange[_index]
+		* zrem
 		* zscore
 
 	TODO:
@@ -95,7 +97,6 @@ class SortedSetCommandsMixin:
 		* zrange[_score, _lex]
 		* zrangestore
 		* zrank
-		* zrem
 		* zremrangebylex
 		* zremrangebyrank
 		* zremrangebyscore
@@ -317,6 +318,42 @@ class SortedSetCommandsMixin:
 			command.append('WITHSCORES')
 		transforms, kwargs = collect_transforms(partial(_zrange_index_convert_to_tuple, with_scores=with_scores), kwargs)
 		return self.execute(*command, error_func=_zrange_index_error_wrapper, transform=transforms, **kwargs)
+
+	@overload
+	def zrem(
+		self: 'Executable',
+		key: str,
+		*members: Any,
+		transform: None = None,
+		encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def zrem(
+		self: 'Executable',
+		key: str,
+		*members: Any,
+		transform: Callable[[int], T],
+		encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
+		...
+	def zrem(self, key, *members, **kwargs):  # noqa: E301
+		"""
+		Removes the specified `members` from the sorted set stored at `key`. Non-existing members
+		are ignored.
+
+		Args:
+			key: Name of the key sorted set is stored at.
+			members: Variable list of members to remove.
+
+		Returns:
+			The number of members removed from the sorted set not including non-existing members.
+
+		Raises:
+			TypeError: If the supplied `key` exists and is not a sorted set.
+		"""
+		command: List[Any] = ['ZREM', key, *members]
+		return self.execute(*command, error_func=_zrem_error_wrapper, transform=kwargs.pop('transform', None), **kwargs)
 
 	@overload
 	def zscore(
