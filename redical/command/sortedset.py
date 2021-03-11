@@ -258,11 +258,11 @@ class SortedSetCommandsMixin:
 		start: int,
 		stop: int,
 		*,
-		with_scores: Literal[False],
-		encoding: Optional[str] = 'utf-8',
+		with_scores: Literal[False] = ...,
 		reversed: bool = False,
+		encoding: Optional[str] = 'utf-8',
 		transform: None = None,
-	) -> Awaitable[List[str]]:
+	) -> Awaitable[Tuple[str, ...]]:
 		...
 	@overload  # noqa: E301
 	def zrange_index(
@@ -271,9 +271,9 @@ class SortedSetCommandsMixin:
 		start: int,
 		stop: int,
 		*,
-		with_scores: Literal[False],
-		encoding: Optional[str] = 'utf-8',
+		with_scores: Literal[False] = ...,
 		reversed: bool = False,
+		encoding: Optional[str] = 'utf-8',
 		transform: Callable[[Tuple[str, ...]], T],
 	) -> Awaitable[T]:
 		...
@@ -285,8 +285,8 @@ class SortedSetCommandsMixin:
 		stop: int,
 		*,
 		with_scores: Literal[True],
-		encoding: Optional[str] = 'utf-8',
 		reversed: bool = False,
+		encoding: Optional[str] = 'utf-8',
 		transform: None = None,
 	) -> Awaitable[Tuple[ElementScore, ...]]:
 		...
@@ -298,8 +298,8 @@ class SortedSetCommandsMixin:
 		stop: int,
 		*,
 		with_scores: Literal[True],
-		encoding: Optional[str] = 'utf-8',
 		reversed: bool = False,
+		encoding: Optional[str] = 'utf-8',
 		transform: Callable[[Tuple[ElementScore, ...]], T],
 	) -> Awaitable[T]:
 		...

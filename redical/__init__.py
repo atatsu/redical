@@ -1,5 +1,5 @@
 from .abstract import RedicalResource  # noqa: F401
-from .command.sortedset import ScorePolicy  # noqa: F401
+from .command.sortedset import ElementScore, ScorePolicy  # noqa: F401
 from .connection import create_connection, Address, Connection  # noqa: F401
 from .const import UpdatePolicy  # noqa: F401
 from .exception import *  # noqa: F401, F403
