@@ -373,6 +373,20 @@ async def test_pipeline_error_prevents_buffer_write(conn):
 	assert 0 == len(conn._resolvers)
 
 
+async def test_pipeline_sanity(conn):
+	"""
+	Ensure pipeline futures can be cleared while not interferring with normal
+	futures.
+	"""
+	fut1 = conn.execute('set', 'foo', 'bar')
+	try:
+		async with conn as pipe:
+			fut2 = pipe.execute('set', 'bar', 'baz')
+	except AttributeError:
+		pytest.fail('Clear attempt on normal future')
+	await asyncio.gather(fut1, fut2)
+
+
 # |-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
 # Transactions
 

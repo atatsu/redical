@@ -53,10 +53,16 @@ class Address(NamedTuple):
 	port: int
 
 
+# TOOD: `error_func` should behave similar to `transform` in that multiple can be
+#       supplied. One should always be added that logs an exception for the error along with the
+#       command that was executed. Even better if the log only happens if the error wasn't
+#       transformed.
 @dataclass
 class Resolver:
+	command: str
 	encoding: Optional[str]
 	future: 'Future'
+	from_pipeline: bool = False
 	error_func: Optional[ErrorFuncType] = None
 	transform: Optional[TransformType] = None
 
@@ -349,8 +355,15 @@ class Connection(RedicalResource):
 		if self._in_pipeline:
 			future = PipelineFutureWrapper(future)
 		self._resolvers.append(
-			Resolver(encoding=_encoding, future=future, transform=transform, error_func=error_func)
+			Resolver(
+				command=' '.join([str(x) for x in (command, *args)]),
+				encoding=_encoding,
+				from_pipeline=self._in_pipeline,
+				future=future,
+				transform=transform,
+				error_func=error_func)
 		)
+		LOG.debug(f'resolvers: {self._resolvers}')
 		return future
 
 	@asynccontextmanager
@@ -397,7 +410,10 @@ class Connection(RedicalResource):
 				parsed: Any
 				resolver: Resolver
 				while (parsed := self._parser.gets()) is not False:
-					LOG.debug(f'parsed response object: {parsed}')
+					if isinstance(parsed, ResponseError):
+						LOG.error(parsed)
+					else:
+						LOG.debug(f'parsed response object: {parsed}')
 
 					parsed_results: List[Any]
 					if self._in_transaction and parsed in ('QUEUED', b'QUEUED'):
@@ -501,7 +517,7 @@ class Connection(RedicalResource):
 			future: 'Future' = PipelineFutureWrapper(asyncio.get_running_loop().create_future())
 			self._resolvers.insert(
 				0,
-				Resolver(encoding=self._encoding, future=future, transform=None, error_func=None)
+				Resolver(command='MULTI', encoding=self._encoding, future=future, transform=None, error_func=None)
 			)
 			# The `EXEC` commaned is replied to with (if the transaction was executed) an array
 			# of all replies for all commands executed in the EXEC block. Since it doesn't have
@@ -517,7 +533,8 @@ class Connection(RedicalResource):
 		self._pipeline_buffer = bytearray()
 
 		for resolver in resolvers:
-			cast(PipelineFutureWrapper, resolver.future).clear_in_progress()
+			if resolver.from_pipeline:
+				cast(PipelineFutureWrapper, resolver.future).clear_in_progress()
 		await asyncio.wait_for(
 			asyncio.gather(*[resolver.future for resolver in resolvers], return_exceptions=True),
 			timeout=self._timeout
