@@ -96,3 +96,16 @@ async def test_hset_valueerror(redical):
 	"""raise a ValueError when odd number of field/value pairs"""
 	with pytest.raises(ValueError, match='Number of supplied fields does not match the number of supplied values'):
 		await redical.hset('mykey', 'foo', 'bar', *[('bar', 'baz'), ('baz',)])
+
+
+async def test_hexists(redical):
+	assert False is await redical.hexists('mykey', 'myfield')
+	assert 1 == await redical.hset('mykey', myfield='myvalue')
+	assert True is await redical.hexists('mykey', 'myfield')
+
+
+async def test_hexists_typeerror(redical):
+	"""raise TypeError for WRONGTYPE"""
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
+		await redical.hexists('mykey', 'myfield')

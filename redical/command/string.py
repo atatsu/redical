@@ -48,6 +48,8 @@ class StringCommandsMixin:
 		* stralgo
 		* strlen
 	"""
+	# FIXME: This should *not* throw an exception if the key does not exist. It should instead
+	#        return `None`
 	@overload
 	def get(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[str]:
 		...

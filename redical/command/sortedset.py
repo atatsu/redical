@@ -307,7 +307,7 @@ class SortedSetCommandsMixin:
 		self, key, start, stop, *, reversed=False, with_scores=False, **kwargs
 	):
 		"""
-		Perform an index range query on a sorted set. The order of elements is from the
+		Perform an index (rank) range query on a sorted set. The order of elements is from the
 		lowest to the highest score. The `start` and `stop` parameters
 		represent zero-based indexes, where `0` is the first element, `1` is the next element,
 		and so on. These parameters specify an **inclusive range**. So for example, a `start` of

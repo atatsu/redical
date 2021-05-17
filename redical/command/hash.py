@@ -15,6 +15,7 @@ def _hset_error_wrapper(exc: Exception) -> Exception:
 
 
 _hdel_error_wrapper = _hset_error_wrapper
+_hexists_error_wrapper = _hset_error_wrapper
 _hget_error_wrapper = _hset_error_wrapper
 _hmget_error_wrapper = _hset_error_wrapper
 _hgetall_error_wrapper = _hset_error_wrapper
@@ -35,13 +36,13 @@ class HashCommandsMixin:
 	"""
 	Implemented commands:
 		* hdel
+		* hexists
 		* hget
 		* hgetall
 		* hmget
 		* hset
 
 	TODO:
-		* hexists
 		* hincrby
 		* hincrbyfloat
 		* hkeys
@@ -51,7 +52,7 @@ class HashCommandsMixin:
 		* hvals
 		* hscan
 	"""
-	def hdel(self: Executable, key: str, *fields: str, **kwargs: Any) -> Awaitable[int]:
+	def hdel(self: Executable, key: str, /, *fields: str, **kwargs: Any) -> Awaitable[int]:
 		"""
 		Removes the specified fields from the hash stored at `key`. Specified fields
 		that do not exist within the hash are ignored. If `key` does not exist it is
@@ -69,7 +70,37 @@ class HashCommandsMixin:
 		"""
 		return self.execute('HDEL', key, *fields, error_func=_hdel_error_wrapper, **kwargs)
 
-	def hget(self: Executable, key: str, /, field: str, **kwargs: Any) -> Awaitable[Any]:
+	@overload
+	def hexists(self: Executable, key: str, /, field: str, transform: None = None, **kwargs: Any) -> Awaitable[bool]:
+		...
+	@overload  # noqa: E301
+	def hexists(self: Executable, key: str, /, field: str, transform: Callable[[bool], T], **kwargs: Any) -> Awaitable[T]:
+		...
+	def hexists(self, key, /, field, **kwargs):  # noqa: E301
+		"""
+		Check if `field` is an existing field in the hash stored at `key`.
+
+		Args:
+			key: Name of the hash key to check for `field`.
+			field: Name of the field to check for the existence of.
+
+		Returns:
+			Whether or not `field` exists.
+
+		Raises:
+			TypeError: If the supplied `key` doesn't contain a hash.
+		"""
+		transforms: List[TransformFuncType]
+		transforms, kwargs = collect_transforms(bool, kwargs)
+		return self.execute('HEXISTS', key, field, error_func=_hexists_error_wrapper, transform=transforms, **kwargs)
+
+	@overload
+	def hget(self: Executable, key: str, /, field: str, transform: None = None, **kwargs: Any) -> Awaitable[str]:
+		...
+	@overload  # noqa: E301
+	def hget(self: Executable, key: str, /, field: str, transform: Callable[[str], T], **kwargs: Any) -> Awaitable[T]:
+		...
+	def hget(self, key, /, field, **kwargs):  # noqa: E301
 		"""
 		Returns the value associated with `field` in the hash stored at `key`.
 
