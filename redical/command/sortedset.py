@@ -12,14 +12,12 @@ from typing import (
 	TypeVar,
 	Tuple,
 	Union,
-	TYPE_CHECKING,
 )
 
 from ..const import UpdatePolicy
+from ..mixin import Executable
 from ..util import collect_transforms
 
-if TYPE_CHECKING:
-	from ..mixin import Executable
 
 T = TypeVar('T')
 
@@ -31,6 +29,7 @@ def _zadd_error_wrapper(exc: Exception) -> Exception:
 
 
 _zcard_error_wrapper = _zadd_error_wrapper
+_zincrby_error_wrapper = _zadd_error_wrapper
 _zrange_index_error_wrapper = _zadd_error_wrapper
 _zscore_error_wrapper = _zadd_error_wrapper
 _zrem_error_wrapper = _zadd_error_wrapper
@@ -79,6 +78,7 @@ class SortedSetCommandsMixin:
 	Implemented commands:
 		* zadd
 		* zcard
+		* zincrby
 		* zrange[_index]
 		* zrem
 		* zscore
@@ -87,7 +87,6 @@ class SortedSetCommandsMixin:
 		* zcount
 		* zdiff
 		* zdiffstore
-		* zincrby
 		* zinter
 		* zinterstore
 		* zlexcount
@@ -108,7 +107,7 @@ class SortedSetCommandsMixin:
 	"""
 	@overload
 	def zadd(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		*member_score_pairs: Tuple[Any, ScoreType],
 		changed: bool = False,
@@ -122,7 +121,7 @@ class SortedSetCommandsMixin:
 		...
 	@overload  # noqa: E301
 	def zadd(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		*member_score_pairs: Tuple[Any, ScoreType],
 		changed: bool = False,
@@ -201,15 +200,15 @@ class SortedSetCommandsMixin:
 
 	@overload
 	def zcard(
-		self: 'Executable', key: str, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+		self: Executable, key: str, *, transform: None = None, encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[int]:
 		...
 	@overload  # noqa: E301
 	def zcard(
-		self: 'Executable', key: str, *, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
+		self: Executable, key: str, *, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[T]:
 		...
-	def zcard(self: 'Executable', key: str, **kwargs):  # noqa: E301
+	def zcard(self: Executable, key: str, **kwargs):  # noqa: E301
 		"""
 		Returns the cardinality (number of elements) of the sorted set stored at `key`.
 
@@ -224,6 +223,57 @@ class SortedSetCommandsMixin:
 		"""
 		command: List[str] = ['ZCARD', key]
 		return self.execute(*command, error_func=_zcard_error_wrapper, **kwargs)
+
+	@overload
+	def zincrby(
+		self: Executable,
+		key: str,
+		/,
+		increment: float,
+		member: str,
+		*,
+		encoding: Optional[str] = 'utf-8',
+		transform: None = None
+	) -> Awaitable[float]:
+		...
+	@overload  # noqa: E301
+	def zincrby(
+		self: Executable,
+		key: str,
+		/,
+		increment: float,
+		member: str,
+		*,
+		encoding: Optional[str] = 'utf-8',
+		transform: Callable[[float], T]
+	) -> Awaitable[T]:
+		...
+	def zincrby(self: Executable, key, /, increment: float, member: str, **kwargs):  # noqa: E301
+		"""
+		Increments the score of `member` in the sorted set stored at `key` by `increment`.
+		If `member` does not exist in the sorted set it is added with `increment` as its
+		score (as if its previous score was `0.0`). If `key` does not exist a new sorted
+		set with the specified `member` as its sole member is created.
+
+		`increment` should be the string representation of a numeric value and accepts
+		double precision floating point numbers. It is possible to provie a negative
+		value to decrement the score.
+
+		Args:
+			key: Name of the key sorted set is stored at.
+			increment: Value by which to increment (or decrement) the score by.
+			member: The member whose score is being adjusted.
+
+		Returns:
+			The new score of `member`.
+
+		Raises:
+			TypeError: If the supplied `key` exists and is not a sorted set.
+		"""
+		transforms, kwargs = collect_transforms(float, kwargs)
+		return self.execute(
+			'ZINCRBY', key, increment, member, error_func=_zincrby_error_wrapper, transform=transforms, **kwargs
+		)
 
 	# def zrange(
 	#   self: 'Executable',
@@ -253,7 +303,7 @@ class SortedSetCommandsMixin:
 
 	@overload
 	def zrange_index(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		start: int,
 		stop: int,
@@ -266,7 +316,7 @@ class SortedSetCommandsMixin:
 		...
 	@overload  # noqa: E301
 	def zrange_index(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		start: int,
 		stop: int,
@@ -279,7 +329,7 @@ class SortedSetCommandsMixin:
 		...
 	@overload  # noqa: E301
 	def zrange_index(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		start: int,
 		stop: int,
@@ -292,7 +342,7 @@ class SortedSetCommandsMixin:
 		...
 	@overload  # noqa: E301
 	def zrange_index(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		start: int,
 		stop: int,
@@ -352,7 +402,7 @@ class SortedSetCommandsMixin:
 
 	@overload
 	def zrem(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		*members: Any,
 		transform: None = None,
@@ -361,7 +411,7 @@ class SortedSetCommandsMixin:
 		...
 	@overload  # noqa: E301
 	def zrem(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		*members: Any,
 		transform: Callable[[int], T],
@@ -388,12 +438,12 @@ class SortedSetCommandsMixin:
 
 	@overload
 	def zscore(
-		self: 'Executable', key: str, member: Any, *, encoding: Optional[str] = 'utf-8', transform: None = None
+		self: Executable, key: str, member: Any, *, encoding: Optional[str] = 'utf-8', transform: None = None
 	) -> Awaitable[Optional[float]]:
 		...
 	@overload  # noqa: E301
 	def zscore(
-		self: 'Executable',
+		self: Executable,
 		key: str,
 		member: Any,
 		*,

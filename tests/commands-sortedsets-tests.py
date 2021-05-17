@@ -146,3 +146,15 @@ async def test_zrange_index_invalid_key(redical):
 	assert True is await redical.set('mykey', 'foo')
 	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
 		await redical.zrange_index('mykey', 0, 2)
+
+
+async def test_zincrby(redical):
+	await redical.zadd('myzset', one=1)
+	assert 5.0 == await redical.zincrby('myzset', 4, 'one')
+
+
+async def test_zincrby_typeerror(redical):
+	"""raise TypeError for WRONGTYPE"""
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(TypeError, match='Operation against a key holding the wrong kind of value'):
+		await redical.zincrby('mykey', 4, 'one')
