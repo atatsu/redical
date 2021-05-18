@@ -134,7 +134,7 @@ class SortedSetCommandsMixin:
 	) -> Awaitable[T]:
 		...
 	def zadd(  # noqa: E301
-		self, key, *member_score_pairs, changed=False, increment=False, score_policy=None, update_policy=None,
+		self: Executable, key, *member_score_pairs, changed=False, increment=False, score_policy=None, update_policy=None,
 		encoding='utf-8', transform=None, **members_scores
 	):
 		"""
@@ -256,7 +256,7 @@ class SortedSetCommandsMixin:
 		set with the specified `member` as its sole member is created.
 
 		`increment` should be the string representation of a numeric value and accepts
-		double precision floating point numbers. It is possible to provie a negative
+		double precision floating point numbers. It is possible to provide a negative
 		value to decrement the score.
 
 		Args:
@@ -354,7 +354,7 @@ class SortedSetCommandsMixin:
 	) -> Awaitable[T]:
 		...
 	def zrange_index(  # noqa: E301
-		self, key, start, stop, *, reversed=False, with_scores=False, **kwargs
+		self: Executable, key, start, stop, *, reversed=False, with_scores=False, **kwargs
 	):
 		"""
 		Perform an index (rank) range query on a sorted set. The order of elements is from the
@@ -451,7 +451,7 @@ class SortedSetCommandsMixin:
 		encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[Optional[T]]:
 		...
-	def zscore(self, key, member, **kwargs):  # noqa: E301
+	def zscore(self: Executable, key, member, **kwargs):  # noqa: E301
 		"""
 		Returns the score of `member` in the sorted set at `key`. If `member` does not exist in the sorted
 		set or `key` does not exist, `None` is returned.

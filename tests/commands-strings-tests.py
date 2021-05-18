@@ -1,6 +1,6 @@
 import pytest
 
-from redical import InvalidKeyError, NoExpiryError
+from redical import NoExpiryError
 
 pytestmark = [pytest.mark.asyncio]
 
@@ -10,14 +10,48 @@ async def test_get(redical):
 	assert 'foo' == await redical.get('mykey')
 
 
-async def test_get_no_key(redical):
-	with pytest.raises(InvalidKeyError, match="Key with name 'mykey' does not exist"):
+async def test_get_typeerror(redical):
+	await redical.hset('mykey', field1='value1', field2='value2')
+	with pytest.raises(TypeError):
 		await redical.get('mykey')
+
+
+async def test_get_no_key(redical):
+	assert None is await redical.get('mykey')
 
 
 async def test_incr(redical):
 	assert 1 == await redical.incr('mykey')
 	assert 2 == await redical.incr('mykey')
+
+
+async def test_incr_typeerror(redical):
+	await redical.hset('mykey', field1='value1', field2='value2')
+	with pytest.raises(TypeError):
+		await redical.incr('mykey')
+
+
+async def test_incr_valueerror(redical):
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(ValueError):
+		await redical.incr('mykey')
+
+
+async def test_incrby(redical):
+	assert 1 == await redical.incr('mykey')
+	assert 11 == await redical.incrby('mykey', 10)
+
+
+async def test_incrby_typeerror(redical):
+	assert 1 == await redical.hset('mykey', field1='value1')
+	with pytest.raises(TypeError):
+		await redical.incrby('mykey', 10)
+
+
+async def test_incrby_valueerror(redical):
+	assert True is await redical.set('mykey', 'foo')
+	with pytest.raises(ValueError):
+		await redical.incrby('mykey', 10)
 
 
 async def test_set_basic(redical):

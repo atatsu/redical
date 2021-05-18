@@ -1,5 +1,5 @@
 from functools import partial
-from typing import overload, Any, Awaitable, Callable, Dict, List, Sequence, TypeVar
+from typing import overload, Any, Awaitable, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from ..mixin import Executable
 from ..type import undefined, TransformFuncType
@@ -71,12 +71,16 @@ class HashCommandsMixin:
 		return self.execute('HDEL', key, *fields, error_func=_hdel_error_wrapper, **kwargs)
 
 	@overload
-	def hexists(self: Executable, key: str, /, field: str, transform: None = None, **kwargs: Any) -> Awaitable[bool]:
+	def hexists(
+		self: Executable, key: str, /, field: str, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[bool]:
 		...
 	@overload  # noqa: E301
-	def hexists(self: Executable, key: str, /, field: str, transform: Callable[[bool], T], **kwargs: Any) -> Awaitable[T]:
+	def hexists(
+		self: Executable, key: str, /, field: str, *, transform: Callable[[bool], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
 		...
-	def hexists(self, key, /, field, **kwargs):  # noqa: E301
+	def hexists(self: Executable, key, /, field, **kwargs):  # noqa: E301
 		"""
 		Check if `field` is an existing field in the hash stored at `key`.
 

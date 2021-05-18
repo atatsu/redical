@@ -1,5 +1,5 @@
 from functools import partial
-from typing import overload, Any, Awaitable, Callable, List, TypeVar
+from typing import overload, Any, Awaitable, Callable, List, Optional, TypeVar
 
 from ..exception import InvalidKeyError, NoExpiryError
 from ..mixin import Executable
@@ -63,7 +63,17 @@ class KeyCommandsMixin:
 		"""
 		return self.execute('DEL', key, *keys, **kwargs)
 
-	def exists(self: Executable, *keys: str, **kwargs: Any) -> Awaitable[int]:
+	@overload
+	def exists(
+		self: Executable, *keys: str, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def exists(
+		self, Executable, *keys: str, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
+		...
+	def exists(self: Executable, *keys, **kwargs):  # noqa: E301
 		"""
 		Return a count for the number of supplied keys that exist.
 
@@ -80,14 +90,16 @@ class KeyCommandsMixin:
 		return self.execute('EXISTS', *keys, **kwargs)
 
 	@overload
-	def expire(self: Executable, key: str, /, timeout: int, transform: None = None, **kwargs: Any) -> Awaitable[bool]:
+	def expire(
+		self: Executable, key: str, /, timeout: int, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[bool]:
 		...
 	@overload  # noqa: E301
 	def expire(
-		self: Executable, key: str, /, timeout: int, transform: Callable[[bool], T], **kwargs: Any
+		self: Executable, key: str, /, timeout: int, *, transform: Callable[[bool], T], encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[T]:
 		...
-	def expire(self, key, /, timeout, **kwargs):  # noqa: E301
+	def expire(self: Executable, key, /, timeout, **kwargs):  # noqa: E301
 		"""
 		Set a timeout on `key` in seconds.
 

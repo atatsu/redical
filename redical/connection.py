@@ -153,6 +153,8 @@ def _build_command(command: CommandType, *args: Any) -> bytes:
 	cmd.extend(b'$%d\r\n' % len(_command))
 	cmd.extend(b'%s\r\n' % _command)
 	arg: Any
+	# TODO: Provide a way to add custom handlers for custom types
+	# TODO: Handle `uuid.UUID`
 	for arg in args:
 		_arg: bytes
 		if isinstance(arg, bytes):

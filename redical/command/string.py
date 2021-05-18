@@ -1,7 +1,5 @@
-from functools import partial
 from typing import overload, Any, AnyStr, Awaitable, Callable, List, Optional, TypeVar, Union
 
-from ..exception import InvalidKeyError
 from ..mixin import Executable
 from ..type import TransformFuncType
 from ..util import collect_transforms
@@ -13,10 +11,20 @@ def _set_convert_to_bool(response: Optional[str]) -> bool:
 	return bool(response)
 
 
-def _get_error_wrapper(response: Optional[Any], *, key: str) -> Any:
-	if response is None:
-		raise InvalidKeyError(key)
-	return response
+def _get_error_wrapper(exc: Exception) -> Exception:
+	if str(exc).startswith('WRONGTYPE'):
+		return TypeError(str(exc).replace('WRONGTYPE ', ''))
+	return exc
+
+
+def _incr_error_wrapper(exc: Exception) -> Exception:
+	exc = _get_error_wrapper(exc)
+	if str(exc).startswith('ERR value'):
+		return ValueError(str(exc).replace('ERR ', ''))
+	return exc
+
+
+_incrby_error_wrapper = _incr_error_wrapper
 
 
 class StringCommandsMixin:
@@ -24,6 +32,7 @@ class StringCommandsMixin:
 	Implemented commands:
 		* get
 		* incr
+		* incrby
 		* set [psetex, setex]
 
 	TODO:
@@ -37,7 +46,6 @@ class StringCommandsMixin:
 		* getbit
 		* getrange
 		* getset
-		* incrby
 		* incrbyfloat
 		* mget
 		* mset
@@ -48,13 +56,15 @@ class StringCommandsMixin:
 		* stralgo
 		* strlen
 	"""
-	# FIXME: This should *not* throw an exception if the key does not exist. It should instead
-	#        return `None`
 	@overload
-	def get(self: Executable, key: str, /, transform: None = None, **kwargs: Any) -> Awaitable[str]:
+	def get(
+		self: Executable, key: str, /, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[Optional[str]]:
 		...
 	@overload  # noqa: E301
-	def get(self: Executable, key: str, /, transform: Callable[[str], T], **kwargs: Any) -> Awaitable[T]:
+	def get(
+		self: Executable, key: str, /, *, transform: Callable[[Optional[str]], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
 		...
 	def get(self, key, /, **kwargs):  # noqa: E301
 		"""
@@ -67,13 +77,21 @@ class StringCommandsMixin:
 			The string stored at `key`.
 
 		Raises:
-			InvalidKeyError: If the supplied `key` does not exist.
+			TypeError: If the supplied `key` exists and is not a string.
 		"""
-		transforms: List[TransformFuncType]
-		transforms, kwargs = collect_transforms(partial(_get_error_wrapper, key=key), kwargs)
-		return self.execute('GET', key, transform=transforms, **kwargs)
+		return self.execute('GET', key, error_func=_get_error_wrapper, **kwargs)
 
-	def incr(self: Executable, key: str, /, **kwargs: Any) -> Awaitable[int]:
+	@overload
+	def incr(
+		self: Executable, key: str, /, *, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def incr(
+		self: Executable, key: str, /, *, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
+		...
+	def incr(self: Executable, key, /, **kwargs):  # noqa: E301
 		"""
 		Increments the number stored at `key` by one.
 
@@ -82,8 +100,44 @@ class StringCommandsMixin:
 
 		Returns:
 			The value of `key` after the increment.
+
+		Raises:
+			TypeError: If the supplied `key` exists and is not a string.
+			ValueError: If the supplied `key` exists but contains a value that cannot be represented
+				as an integer.
 		"""
-		return self.execute('INCR', key, **kwargs)
+		return self.execute('INCR', key, error_func=_incr_error_wrapper, **kwargs)
+
+	@overload
+	def incrby(
+		self: Executable, key: str, /, increment: int, *, transform: None = None, encoding: Optional[str]
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def incrby(
+		self: Executable, key: str, /, increment: int, *, transform: Callable[[int], T], encoding: Optional[str]
+	) -> Awaitable[T]:
+		...
+	def incrby(self: Executable, key, /, increment, **kwargs):  # noqa: E301
+		"""
+		Increments the number stored at `key` by `increment`. If the key does not
+		exist it is set to `0` before performing the operation. This operation is
+		limited to 64 bit signed integers. It is possible to provide a negative
+		value to decrement the score.
+
+		Args:
+			key: Name of the key to increment.
+			increment: Value by which to increment (or decrement) the value by.
+
+		Returns:
+			The new value of `key` after the increment (or decrement).
+
+		Raises:
+			TypeError: If the supplied `key` exists and is not a string.
+			ValueError: If the supplied `key` exists but contains a value that cannot be represented
+				as an integer.
+		"""
+		return self.execute('INCRBY', key, increment, error_func=_incrby_error_wrapper, **kwargs)
 
 	# FIXME: `only_if_exists` and `only_if_not_exists` should be replaced with `const.UpdatePolicy`
 	# TODO: Add support for `GET` option
@@ -102,7 +156,7 @@ class StringCommandsMixin:
 		only_if_not_exists: bool = False,
 		keep_ttl: bool = False,
 		transform: None = None,
-		**kwargs: Any
+		encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[bool]:
 		...
 	@overload  # noqa: E301
@@ -118,11 +172,11 @@ class StringCommandsMixin:
 		only_if_not_exists: bool = False,
 		keep_ttl: bool = False,
 		transform: Callable[[bool], T],
-		**kwargs: Any
+		encoding: Optional[str] = 'utf-8'
 	) -> Awaitable[T]:
 		...
 	def set(  # noqa: E301
-		self, key, /, value, *,
+		self: Executable, key, /, value, *,
 		expire_in_seconds=None, expire_in_milliseconds=None, only_if_exists=False, only_if_not_exists=False,
 		keep_ttl=False, **kwargs
 	):
