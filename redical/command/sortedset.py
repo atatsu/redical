@@ -229,8 +229,8 @@ class SortedSetCommandsMixin:
 		self: Executable,
 		key: str,
 		/,
-		increment: float,
 		member: str,
+		increment: float,
 		*,
 		encoding: Optional[str] = 'utf-8',
 		transform: None = None
@@ -241,14 +241,14 @@ class SortedSetCommandsMixin:
 		self: Executable,
 		key: str,
 		/,
-		increment: float,
 		member: str,
+		increment: float,
 		*,
 		encoding: Optional[str] = 'utf-8',
 		transform: Callable[[float], T]
 	) -> Awaitable[T]:
 		...
-	def zincrby(self: Executable, key, /, increment: float, member: str, **kwargs):  # noqa: E301
+	def zincrby(self: Executable, key, /, member: str, increment: float, **kwargs):  # noqa: E301
 		"""
 		Increments the score of `member` in the sorted set stored at `key` by `increment`.
 		If `member` does not exist in the sorted set it is added with `increment` as its
@@ -261,8 +261,8 @@ class SortedSetCommandsMixin:
 
 		Args:
 			key: Name of the key sorted set is stored at.
-			increment: Value by which to increment (or decrement) the score by.
 			member: The member whose score is being adjusted.
+			increment: Value by which to increment (or decrement) the score by.
 
 		Returns:
 			The new score of `member`.
@@ -449,7 +449,7 @@ class SortedSetCommandsMixin:
 		*,
 		transform: Callable[[Optional[float]], T],
 		encoding: Optional[str] = 'utf-8'
-	) -> Awaitable[Optional[T]]:
+	) -> Awaitable[T]:
 		...
 	def zscore(self: Executable, key, member, **kwargs):  # noqa: E301
 		"""

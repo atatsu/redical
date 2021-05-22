@@ -52,7 +52,17 @@ class HashCommandsMixin:
 		* hvals
 		* hscan
 	"""
-	def hdel(self: Executable, key: str, /, *fields: str, **kwargs: Any) -> Awaitable[int]:
+	@overload
+	def hdel(
+		self: Executable, key: str, /, *fields: str, transform: None = None, encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[int]:
+		...
+	@overload  # noqa: E301
+	def hdel(
+		self: Executable, key: str, /, *fields: str, transform: Callable[[int], T], encoding: Optional[str] = 'utf-8'
+	) -> Awaitable[T]:
+		...
+	def hdel(self: Executable, key, /, *fields, **kwargs):  # noqa: E301
 		"""
 		Removes the specified fields from the hash stored at `key`. Specified fields
 		that do not exist within the hash are ignored. If `key` does not exist it is

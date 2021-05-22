@@ -441,6 +441,7 @@ class Connection(RedicalResource):
 							parsed = True
 
 						# TODO: what if there is no future to pop?
+						# FIXME: ^^ A transaction error will cause this very thing to happen
 						resolver = self._resolvers.popleft()
 						try:
 							if isinstance(parsed, ResponseError):
