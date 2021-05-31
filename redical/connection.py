@@ -251,6 +251,7 @@ class Connection(RedicalResource):
 	_read_data_task: 'Task'
 	_resolvers: Deque[Resolver]
 	_timeout: float
+	_waiting_for_exec_reply: bool
 	_watched_keys: Tuple[str, ...]
 	_writer: 'StreamWriter'
 
@@ -309,7 +310,9 @@ class Connection(RedicalResource):
 		self._read_data_task = asyncio.create_task(self._read_data(), name=f'{self}._read_data')
 		self._read_data_task.add_done_callback(self._set_read_state)
 		self._resolvers = deque()
+		self._waiting_for_exec_reply = False
 		self._timeout = float(timeout)
+
 		self._watched_keys = ()
 		self._writer = writer
 
@@ -423,11 +426,16 @@ class Connection(RedicalResource):
 						# the futures' results
 						continue
 
-					if self._in_transaction and isinstance(parsed, list):
+					# when in a transaction we need to be aware of when we're actually waiting for the
+					# EXEC response vs when we've executed a command *before* the MULTI/EXEC block
+					# (which triggers when entering pipeline mode within a transaction)
+					if self._in_transaction and self._waiting_for_exec_reply and isinstance(parsed, list):
 						# EXEC results received
 						parsed_results = parsed
-					elif self._in_transaction and parsed is None:
+						self._waiting_for_exec_reply = False
+					elif self._in_transaction and self._waiting_for_exec_reply and parsed is None:
 						# set a `WatchError` on all futures that are queued up
+						self._waiting_for_exec_reply = False
 						while len(self._resolvers) > 0:
 							resolver = self._resolvers.popleft()
 							resolver.future.set_exception(WatchError(*self._watched_keys))
@@ -526,6 +534,7 @@ class Connection(RedicalResource):
 			# of all replies for all commands executed in the EXEC block. Since it doesn't have
 			# it's own dedicated reply we don't need to add a future for it
 			self._pipeline_buffer.extend(_build_command('EXEC'))
+			self._waiting_for_exec_reply = True
 
 		if not aborting and not erroring:
 			LOG.debug(f'writing pipeline buffer: {self._pipeline_buffer!r} [{self}]')

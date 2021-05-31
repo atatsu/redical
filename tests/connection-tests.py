@@ -422,6 +422,25 @@ async def test_transaction_no_watch(conn):
 		_execute.assert_not_called()
 
 
+async def test_transaction_pre_multi_exec(conn):
+	"""
+	Found a logic error with the transaction handling that assumed all list replies
+	were the EXEC response. If any commands are executed before the MULTI/EXEC commands
+	(before the connection's `__aenter__`/`__aexit__` are triggered) that result in a list
+	response (such as `hgetall`) stuff blows up. This verifies the fix.
+	"""
+	await conn.execute('HSET', 'mykey', 'field1', 'value1', 'field2', 'value2')
+	async with conn.transaction('mykey') as t:
+		res = await conn.execute('hgetall', 'mykey')
+		async with t as pipe:
+			pipe.execute('hset', 'mykey', 'field1', 'foo')
+			pipe.execute('hset', 'mykey', 'field2', 'bar')
+	assert ['field1', 'value1', 'field2', 'value2'] == res
+
+	res = await conn.execute('hgetall', 'mykey')
+	assert ['field1', 'foo', 'field2', 'bar'] == res
+
+
 async def test_transaction_watch_error(conn, conn2):
 	await conn.execute('SET', 'mykey', 1)
 	async with conn.transaction('mykey', 'myotherkey') as t:
